@@ -9,7 +9,7 @@ import os
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.problems import PortfolioProblem
+from src.problems.instance_generators import create_portfolio_instance
 
 # Create a portfolio optimization problem
 returns = np.array([0.10, 0.15, 0.05, 0.12, 0.08])  # Expected returns (10%, 15%, etc.)
@@ -26,8 +26,18 @@ risk_factor = 1.0  # Weight for risk term (higher values mean more risk-averse)
 # Create asset names for better visualization
 asset_names = ["Tech", "Finance", "Energy", "Healthcare", "Consumer"]
 
-# Create the PortfolioProblem instance
-problem = PortfolioProblem(returns, risk_matrix, budget, risk_factor, asset_names, name="Example Portfolio")
+# Create the PortfolioProblem instance using the utility function
+problem = create_portfolio_instance(
+    n_assets=len(returns),
+    returns=returns,
+    risk_matrix=risk_matrix,
+    name="Example Portfolio"
+)
+
+# Set additional properties not covered by the factory function
+problem.budget = budget
+problem.risk_factor = risk_factor
+problem.asset_names = asset_names
 
 # Print problem information
 problem.print_info()
@@ -87,8 +97,17 @@ results = []
 
 for rf in risk_factors:
     # Create a new problem with this risk factor
-    rf_problem = PortfolioProblem(returns, risk_matrix, budget, rf, asset_names, 
-                                  name=f"Portfolio (RF={rf})")
+    rf_problem = create_portfolio_instance(
+        n_assets=len(returns),
+        returns=returns,
+        risk_matrix=risk_matrix,
+        name=f"Portfolio (RF={rf})"
+    )
+    
+    # Set additional properties not covered by the factory function
+    rf_problem.budget = budget
+    rf_problem.risk_factor = rf
+    rf_problem.asset_names = asset_names
     
     # Solve it
     solution = rf_problem.solve_classically()

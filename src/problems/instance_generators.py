@@ -8,8 +8,7 @@ import networkx as nx
 import numpy as np
 from typing import List, Tuple, Dict, Any, Optional, Union
 
-from ..problems import MaxCutProblem, TSPProblem, KnapsackProblem, PortfolioProblem, NumberPartitioningProblem
-from .graph_utils import (
+from ..utils.graph_utils import (
     create_random_weighted_graph, 
     create_complete_weighted_graph,
     create_grid_graph,
@@ -24,7 +23,7 @@ def create_maxcut_instance(
     grid_dims: Optional[Tuple[int, int]] = None,
     name: str = "MaxCut Instance",
     seed: Optional[int] = None
-) -> MaxCutProblem:
+):
     """
     Create a MaxCut problem instance.
     
@@ -40,6 +39,9 @@ def create_maxcut_instance(
     Returns:
         MaxCutProblem instance
     """
+    # Import inside function to avoid circular imports
+    from .maxcut import MaxCutProblem
+    
     if graph_type == "random":
         graph = create_random_weighted_graph(
             n_nodes=n_nodes, 
@@ -72,7 +74,7 @@ def create_tsp_instance(
     coordinate_range: Tuple[float, float] = (0, 100),
     name: str = "TSP Instance",
     seed: Optional[int] = None
-) -> TSPProblem:
+):
     """
     Create a TSP problem instance.
     
@@ -86,6 +88,9 @@ def create_tsp_instance(
     Returns:
         TSPProblem instance
     """
+    # Import inside function to avoid circular imports
+    from .tsp import TSPProblem
+    
     if seed is not None:
         np.random.seed(seed)
         
@@ -99,14 +104,30 @@ def create_tsp_instance(
             for _ in range(n_cities)
         ]
     
+    # Ensure n_cities is correct based on provided coordinates
+    n_cities = len(coordinates)
+    
     # Create a fully connected graph with distances as weights
     graph = create_weighted_graph_from_distances(coordinates, fully_connected=True)
     
-    # Store coordinates as node attributes
-    for i, coord in enumerate(coordinates):
-        graph.nodes[i]['pos'] = coord
+    # Convert the graph into a distance matrix
+    distances = np.zeros((n_cities, n_cities))
+    for i in range(n_cities):
+        for j in range(n_cities):
+            if i != j:
+                if graph.has_edge(i, j):
+                    distances[i, j] = graph[i][j]['weight']
+                else:
+                    # If edge doesn't exist in the graph, use a large distance
+                    distances[i, j] = 1000.0
     
-    return TSPProblem(graph, name=name)
+    # Create city positions array from coordinates
+    city_positions = np.array(coordinates)
+    
+    # Create optional city names
+    city_names = [f"City {i}" for i in range(n_cities)]
+    
+    return TSPProblem(distances=distances, city_names=city_names, city_positions=city_positions, name=name)
 
 def create_knapsack_instance(
     n_items: int = 10,
@@ -115,7 +136,7 @@ def create_knapsack_instance(
     weight_range: Tuple[float, float] = (5, 30),
     name: str = "Knapsack Instance",
     seed: Optional[int] = None
-) -> KnapsackProblem:
+):
     """
     Create a Knapsack problem instance.
     
@@ -130,6 +151,9 @@ def create_knapsack_instance(
     Returns:
         KnapsackProblem instance
     """
+    # Import inside function to avoid circular imports
+    from .knapsack import KnapsackProblem
+    
     if seed is not None:
         np.random.seed(seed)
     
@@ -137,7 +161,8 @@ def create_knapsack_instance(
     values = np.random.uniform(value_range[0], value_range[1], n_items)
     weights = np.random.uniform(weight_range[0], weight_range[1], n_items)
     
-    return KnapsackProblem(values=values, weights=weights, max_weight=max_weight, name=name)
+    # Note: KnapsackProblem uses 'capacity' instead of 'max_weight'
+    return KnapsackProblem(values=values, weights=weights, capacity=max_weight, name=name)
 
 def create_portfolio_instance(
     n_assets: int = 5,
@@ -145,9 +170,10 @@ def create_portfolio_instance(
     risk_matrix: Optional[np.ndarray] = None,
     return_range: Tuple[float, float] = (0.01, 0.15),
     risk_factor: float = 0.5,
+    budget: int = 3,
     name: str = "Portfolio Instance",
     seed: Optional[int] = None
-) -> PortfolioProblem:
+):
     """
     Create a Portfolio Optimization problem instance.
     
@@ -157,12 +183,16 @@ def create_portfolio_instance(
         risk_matrix: Optional covariance matrix for risk
         return_range: Range for random returns if not provided
         risk_factor: Factor for random risk generation
+        budget: Maximum number of assets to select (default: 3)
         name: Name of the problem instance
         seed: Random seed for reproducibility
         
     Returns:
         PortfolioProblem instance
     """
+    # Import inside function to avoid circular imports
+    from .portfolio import PortfolioProblem
+    
     if seed is not None:
         np.random.seed(seed)
     
@@ -184,7 +214,7 @@ def create_portfolio_instance(
         vols = np.random.uniform(0.05, 0.3, n_assets)
         risk_matrix = corr * np.outer(vols, vols) * risk_factor
     
-    return PortfolioProblem(returns=returns, risk_matrix=risk_matrix, name=name)
+    return PortfolioProblem(returns=returns, risk_matrix=risk_matrix, budget=budget, risk_factor=risk_factor, name=name)
 
 def create_number_partitioning_instance(
     numbers: Optional[List[float]] = None,
@@ -192,25 +222,21 @@ def create_number_partitioning_instance(
     number_range: Tuple[float, float] = (1, 100),
     name: str = "Number Partitioning Instance",
     seed: Optional[int] = None
-) -> NumberPartitioningProblem:
+):
     """
     Create a Number Partitioning problem instance.
     
     Args:
         numbers: Optional list of numbers to partition
-        n_numbers: Number of numbers to generate if not provided
-        number_range: Range for random numbers if not provided
+        n_numbers: Number of numbers to generate if numbers is None
+        number_range: Range for random numbers if numbers is None
         name: Name of the problem instance
         seed: Random seed for reproducibility
         
     Returns:
         NumberPartitioningProblem instance
     """
-    if seed is not None:
-        np.random.seed(seed)
-    
-    if numbers is None:
-        # Generate random numbers
-        numbers = np.random.uniform(number_range[0], number_range[1], n_numbers)
-    
-    return NumberPartitioningProblem(numbers=numbers, name=name)
+    # Import here to avoid circular imports
+    # Since there's no NumberPartitioningProblem class, we'll raise an error
+    # This will need to be implemented
+    raise NotImplementedError("NumberPartitioningProblem is not yet implemented")

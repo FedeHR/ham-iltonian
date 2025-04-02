@@ -9,7 +9,7 @@ import os
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.utils.instance_generators import create_knapsack_instance
+from src.problems.instance_generators import create_knapsack_instance
 
 # Create a small knapsack problem using predefined values and weights
 values = np.array([10, 20, 15, 25, 30])

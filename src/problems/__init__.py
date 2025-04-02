@@ -9,4 +9,13 @@ from .base import Problem
 from .maxcut import MaxCutProblem
 from .knapsack import KnapsackProblem
 from .tsp import TSPProblem
-from .portfolio import PortfolioProblem 
+from .portfolio import PortfolioProblem
+
+# Import instance generators from their new location
+from .instance_generators import (
+    create_maxcut_instance,
+    create_tsp_instance,
+    create_knapsack_instance,
+    create_portfolio_instance
+    # create_number_partitioning_instance is not yet implemented
+) 

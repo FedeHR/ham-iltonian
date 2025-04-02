@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 ```python
 # Create a MaxCut problem instance using utility functions
-from src.utils.instance_generators import create_maxcut_instance
+from src.problems.instance_generators import create_maxcut_instance
 
 # Create a problem with 5 nodes
 problem = create_maxcut_instance(
@@ -45,7 +45,7 @@ problem.print_solution("classical")
 ### Other problem types
 
 ```python
-from src.utils.instance_generators import (
+from src.problems.instance_generators import (
     create_tsp_instance,
     create_knapsack_instance,
     create_portfolio_instance

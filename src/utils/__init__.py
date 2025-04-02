@@ -21,11 +21,3 @@ from .graph_utils import (
     create_grid_graph,
     create_weighted_graph_from_distances
 )
-
-from .instance_generators import (
-    create_maxcut_instance,
-    create_tsp_instance,
-    create_knapsack_instance,
-    create_portfolio_instance,
-    create_number_partitioning_instance
-)

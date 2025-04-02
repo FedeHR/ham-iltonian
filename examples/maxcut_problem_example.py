@@ -10,7 +10,7 @@ import os
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.utils.instance_generators import create_maxcut_instance
+from src.problems.instance_generators import create_maxcut_instance
 
 # Create a MaxCut problem instance using our utility function
 problem = create_maxcut_instance(

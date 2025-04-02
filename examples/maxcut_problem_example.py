@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Example usage of the MaxCutProblem class.
+Example usage of the MaxCutProblem class with the new utility functions.
 """
-import networkx as nx
 import pennylane as qml
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,20 +10,17 @@ import os
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.problems import MaxCutProblem
+from src.utils.instance_generators import create_maxcut_instance
 
-# Create a simple weighted graph
-G = nx.Graph()
-G.add_weighted_edges_from([
-    (0, 1, 1.0),
-    (0, 2, 2.0),
-    (1, 2, 1.0),
-    (1, 3, 2.0),
-    (2, 3, 1.0)
-])
-
-# Create the MaxCutProblem instance
-problem = MaxCutProblem(G, name="Example MaxCut")
+# Create a MaxCut problem instance using our utility function
+problem = create_maxcut_instance(
+    n_nodes=5,
+    edge_probability=0.7,
+    weight_range=(0.5, 2.0),
+    graph_type="random",
+    name="Example MaxCut",
+    seed=42
+)
 
 # Print problem information
 problem.print_info()
@@ -46,16 +42,16 @@ def qaoa_layer(gamma, beta):
     # Problem unitary
     qml.ApproxTimeEvolution(hamiltonian.to_pennylane(), gamma, 1)
     # Mixer unitary
-    for q in range(G.number_of_nodes()):
+    for q in range(problem.graph.number_of_nodes()):
         qml.RX(2 * beta, wires=q)
 
 # Create a quantum device and QNode
-dev = qml.device("default.qubit", wires=G.number_of_nodes())
+dev = qml.device("default.qubit", wires=problem.graph.number_of_nodes())
 
 @qml.qnode(dev)
 def cost_function(params):
     # Initialize in the plus state
-    for q in range(G.number_of_nodes()):
+    for q in range(problem.graph.number_of_nodes()):
         qml.Hadamard(wires=q)
         
     # Apply QAOA layers
@@ -78,7 +74,7 @@ print(f"Initial QAOA cost: {cost_function(params)}")
 @qml.qnode(dev)
 def get_state(params):
     # Initialize in the plus state
-    for q in range(G.number_of_nodes()):
+    for q in range(problem.graph.number_of_nodes()):
         qml.Hadamard(wires=q)
         
     # Apply QAOA layers
@@ -86,11 +82,11 @@ def get_state(params):
         qaoa_layer(gamma, beta)
         
     # Return the state probabilities
-    return qml.probs(wires=range(G.number_of_nodes()))
+    return qml.probs(wires=range(problem.graph.number_of_nodes()))
 
 # Get the most probable bitstring from QAOA
 probs = get_state(params)
-qaoa_bitstring = np.binary_repr(np.argmax(probs), width=G.number_of_nodes())
+qaoa_bitstring = np.binary_repr(np.argmax(probs), width=problem.graph.number_of_nodes())
 print(f"QAOA most probable bitstring: {qaoa_bitstring}")
 
 # Get the QAOA solution
@@ -106,4 +102,4 @@ print("\nClassical solution:")
 problem.visualize_solution(classical_solution, filename="maxcut_classical_solution.png")
 
 print("\nQAOA solution:")
-problem.visualize_solution(qaoa_solution, filename="maxcut_qaoa_solution.png") 
+problem.visualize_solution(qaoa_solution, filename="maxcut_qaoa_solution.png")

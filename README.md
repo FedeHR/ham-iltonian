@@ -8,6 +8,7 @@ Key features:
 - 📈 Classical solvers included for benchmarking
 - 🎨 Built-in visualization tools for solutions
 - ⚡ Parametrized Hamiltonian support for dynamic problems (dynamic time, risk factors, or any other desired parameter)
+- 🧩 Easy problem instance generation with utility functions
 
 Perfect for researchers and developers working at the intersection of quantum computing and optimization problems.
 
@@ -20,17 +21,44 @@ pip install -r requirements.txt
 ## Usage
 
 ```python
-# Using MaxCut as an example
-import networkx as nx
-from src.hamiltonians.maxcut import create_maxcut_hamiltonian
+# Create a MaxCut problem instance using utility functions
+from src.utils.instance_generators import create_maxcut_instance
 
-# Create a graph for the MaxCut problem
-G = nx.Graph()
-G.add_weighted_edges_from([(0, 1, 1.0), (1, 2, 0.5), (0, 2, 0.8)])
+# Create a problem with 5 nodes
+problem = create_maxcut_instance(
+    n_nodes=5,
+    edge_probability=0.7,
+    weight_range=(0.5, 2.0),
+    graph_type="random",
+    seed=42
+)
 
 # Create the corresponding Hamiltonian
-hamiltonian = create_maxcut_hamiltonian(G)
+hamiltonian = problem.create_hamiltonian()
 print(hamiltonian)
+
+# Solve classically for comparison
+solution = problem.solve_classically()
+problem.print_solution("classical")
+```
+
+### Other problem types
+
+```python
+from src.utils.instance_generators import (
+    create_tsp_instance,
+    create_knapsack_instance,
+    create_portfolio_instance
+)
+
+# TSP with 5 cities
+tsp = create_tsp_instance(n_cities=5, seed=42)
+
+# Knapsack with 10 items
+knapsack = create_knapsack_instance(n_items=10, max_weight=100.0, seed=42)
+
+# Portfolio with 5 assets
+portfolio = create_portfolio_instance(n_assets=5, seed=42)
 ```
 
 ## References

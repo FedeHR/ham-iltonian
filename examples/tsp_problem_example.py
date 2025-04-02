@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Example usage of the TSPProblem class.
+Example usage of the TSPProblem class with different TSP variants.
+Shows how to create various types of TSP instances including grid-based TSP.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,68 +10,137 @@ import os
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.problems import TSPProblem
+from src.utils.instance_generators import create_tsp_instance
 
-# Create a simple TSP problem
-n_cities = 4
-# Distance matrix - each entry is the distance between cities i and j
-distances = np.array([
-    [0.0, 2.0, 5.0, 7.0],
-    [2.0, 0.0, 3.0, 6.0],
-    [5.0, 3.0, 0.0, 2.0],
-    [7.0, 6.0, 2.0, 0.0]
-])
+# 1. Simple TSP with manual coordinates (square)
+print("="*50)
+print("1. Simple TSP with manual coordinates")
+print("="*50)
+coordinates = [
+    (0, 0),     # City 0
+    (0, 10),    # City 1
+    (10, 10),   # City 2
+    (10, 0)     # City 3
+]
 
-# Define city positions for visualization
-city_positions = {
-    0: (0, 0),   # City 0 at (0, 0)
-    1: (0, 1),   # City 1 at (0, 1)
-    2: (1, 1),   # City 2 at (1, 1)
-    3: (1, 0)    # City 3 at (1, 0)
-}
-
-# Create the TSPProblem instance
-problem = TSPProblem(distances, city_positions, name="Example TSP")
+manual_tsp = create_tsp_instance(
+    coordinates=coordinates,
+    name="Simple Square TSP",
+    seed=42
+)
 
 # Print problem information
-problem.print_info()
-
-# Create the Hamiltonian
-hamiltonian = problem.create_hamiltonian()
-problem.print_hamiltonian(truncate=True, max_length=500)
+manual_tsp.print_info()
 
 # Solve using classical brute force
 print("\nSolving classically...")
-classical_solution = problem.solve_classically()
-problem.print_solution("classical")
+manual_solution = manual_tsp.solve_classically()
+manual_tsp.print_solution("classical")
 
-# Test some manually created solutions
-print("\nTesting manual solutions:")
+# Visualize the solution
+print("\nManual coordinates solution:")
+manual_tsp.visualize_solution(manual_solution, filename="manual_tsp_solution.png")
 
-# Test tour 1: 0->1->2->3->0
-bitstring1 = "1000" + "0100" + "0010" + "0001"
-solution1 = problem.get_solution_from_bitstring(bitstring1)
-problem.add_solution("manual_0123", solution1)
-print("\nTour 0->1->2->3->0:")
-problem.print_solution("manual_0123")
+# 2. Grid-based TSP
+print("\n" + "="*50)
+print("2. Grid-based TSP")
+print("="*50)
 
-# Test tour 2: 0->1->3->2->0
-bitstring2 = "1000" + "0100" + "0001" + "0010"
-solution2 = problem.get_solution_from_bitstring(bitstring2)
-problem.add_solution("manual_0132", solution2)
-print("\nTour 0->1->3->2->0:")
-problem.print_solution("manual_0132")
+grid_tsp = create_tsp_instance(
+    n_cities=16,
+    tsp_type="grid",
+    grid_dims=(4, 4),
+    coordinate_range=(0, 30),
+    name="4x4 Grid TSP",
+    seed=123
+)
 
-# Compare solutions
-solution_names = ["classical", "manual_0123", "manual_0132"]
-problem.print_comparison(solution_names)
+# Print problem information
+grid_tsp.print_info()
 
-# Visualize the solutions
-print("\nClassical solution:")
-problem.visualize_solution(classical_solution, filename="tsp_classical_solution.png")
+# Solve using classical brute force
+print("\nSolving classically...")
+grid_solution = grid_tsp.solve_classically()
+grid_tsp.print_solution("classical")
 
-print("\nManual solution 1 (0->1->2->3->0):")
-problem.visualize_solution(solution1, filename="tsp_manual_solution1.png")
+# Visualize the solution
+print("\nGrid TSP solution:")
+grid_tsp.visualize_solution(grid_solution, filename="grid_tsp_solution.png")
 
-print("\nManual solution 2 (0->1->3->2->0):")
-problem.visualize_solution(solution2, filename="tsp_manual_solution2.png") 
+# 3. Circular TSP
+print("\n" + "="*50)
+print("3. Circular TSP")
+print("="*50)
+
+circle_tsp = create_tsp_instance(
+    n_cities=8,
+    tsp_type="circle",
+    coordinate_range=(0, 100),
+    name="Circular TSP with 8 cities",
+    seed=456
+)
+
+# Print problem information
+circle_tsp.print_info()
+
+# Solve using classical brute force
+print("\nSolving classically...")
+circle_solution = circle_tsp.solve_classically()
+circle_tsp.print_solution("classical")
+
+# Visualize the solution
+print("\nCircular TSP solution:")
+circle_tsp.visualize_solution(circle_solution, filename="circle_tsp_solution.png")
+
+# 4. Clustered TSP
+print("\n" + "="*50)
+print("4. Clustered TSP")
+print("="*50)
+
+clustered_tsp = create_tsp_instance(
+    n_cities=15,
+    tsp_type="clustered",
+    clusters=3,
+    cluster_std=5.0,
+    coordinate_range=(0, 100),
+    name="Clustered TSP with 3 clusters",
+    seed=789
+)
+
+# Print problem information
+clustered_tsp.print_info()
+
+# Solve using classical brute force
+print("\nSolving classically...")
+clustered_solution = clustered_tsp.solve_classically()
+clustered_tsp.print_solution("classical")
+
+# Visualize the solution
+print("\nClustered TSP solution:")
+clustered_tsp.visualize_solution(clustered_solution, filename="clustered_tsp_solution.png")
+
+# 5. Asymmetric TSP
+print("\n" + "="*50)
+print("5. Asymmetric TSP (Random)")
+print("="*50)
+
+asymmetric_tsp = create_tsp_instance(
+    n_cities=6,
+    tsp_type="random",
+    symmetric=False,
+    coordinate_range=(0, 50),
+    name="Asymmetric Random TSP",
+    seed=101
+)
+
+# Print problem information
+asymmetric_tsp.print_info()
+
+# Solve using classical brute force
+print("\nSolving classically...")
+asymmetric_solution = asymmetric_tsp.solve_classically()
+asymmetric_tsp.print_solution("classical")
+
+# Visualize the solution
+print("\nAsymmetric TSP solution:")
+asymmetric_tsp.visualize_solution(asymmetric_solution, filename="asymmetric_tsp_solution.png")

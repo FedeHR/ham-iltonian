@@ -1,0 +1,8 @@
+lucas_ising_formulations.pdf
+temp/
+.pytest_cache/
+src/__pycache__/
+src/hamiltonians/__pycache__/
+src/utils/__pycache__/
+tests/__pycache__/
+problems/__pycache__/

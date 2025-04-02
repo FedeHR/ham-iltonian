@@ -1,0 +1,5 @@
+pennylane>=0.31.0
+numpy>=1.22.0
+networkx>=3.0
+matplotlib>=3.5.0
+pytest>=7.0.0 

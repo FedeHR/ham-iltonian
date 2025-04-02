@@ -1,93 +1,100 @@
 """
-Implementation of the Number Partitioning Problem Hamiltonian.
+Number Partitioning Hamiltonian implementation.
 
-The Number Partitioning Problem seeks to divide a set of numbers into two subsets
-such that the difference between the sums of the subsets is minimized.
+This module provides functions for creating and analyzing Hamiltonians
+for the Number Partitioning problem.
 """
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Any, Optional, Tuple
+
 from .base import Hamiltonian
-from ..utils.pauli_utils import create_z_term, create_zz_term
+from ..utils.pauli_utils import create_z_term, create_zz_term, pauli_term_to_pennylane
 
 def create_number_partitioning_hamiltonian(numbers: List[float]) -> Hamiltonian:
     """
-    Create a Hamiltonian for the Number Partitioning Problem.
+    Create a Hamiltonian for the Number Partitioning problem.
     
-    Following the formulation from Lucas (2014), we use binary variables s_i in {-1, 1}
-    to represent which subset each number goes into. The Hamiltonian is:
+    The Hamiltonian is designed to minimize the squared difference between the
+    subset sums, which is equivalent to minimizing (S_a - S_b)^2, where S_a and S_b
+    are the sums of subsets A and B respectively.
     
-    H = (sum_{i=1}^{n} a_i s_i)^2
+    This can be expanded as (2*S_a - S_total)^2, where S_a is the sum of elements
+    with value 1 in the bit string, and S_total is the sum of all numbers.
     
-    where a_i are the numbers to be partitioned.
+    Let x_i be the binary decision variable (0 or 1) for each element.
+    Then the Hamiltonian is (2*sum(a_i * x_i) - sum(a_i))^2, 
+    where a_i are the numbers.
     
     Args:
         numbers: List of numbers to partition
         
     Returns:
-        Hamiltonian for the Number Partitioning Problem
+        Hamiltonian for the Number Partitioning problem
     """
-    n_numbers = len(numbers)
-    hamiltonian = Hamiltonian(n_numbers)
+    n = len(numbers)
+    total_sum = sum(numbers)
+    hamiltonian = Hamiltonian(n)
     hamiltonian.metadata["problem"] = "NumberPartitioning"
     hamiltonian.metadata["numbers"] = numbers
     
-    # Expanding (sum_{i=1}^{n} a_i s_i)^2:
-    # = sum_{i=1}^{n} a_i^2 + 2 * sum_{i<j} a_i * a_j * s_i * s_j
+    # Expand (2*sum(a_i * x_i) - total_sum)^2
+    # = 4*sum(a_i * x_i)^2 - 4*total_sum*sum(a_i * x_i) + total_sum^2
+    # = 4*sum(a_i^2 * x_i^2) + 4*sum(a_i * a_j * x_i * x_j) - 4*total_sum*sum(a_i * x_i) + total_sum^2
+    # Since x_i^2 = x_i for binary variables:
+    # = 4*sum(a_i^2 * x_i) + 4*sum_i!=j(a_i * a_j * x_i * x_j) - 4*total_sum*sum(a_i * x_i) + total_sum^2
     
-    # Constant term: sum_{i=1}^{n} a_i^2
-    constant_term = sum(a**2 for a in numbers)
-    hamiltonian.add_constant(constant_term)
+    # Constant term: total_sum^2
+    hamiltonian.add_constant(total_sum**2)
     
-    # Interaction terms: 2 * sum_{i<j} a_i * a_j * s_i * s_j
-    # Since s_i = Z_i in the Ising formulation, we directly add Z_i Z_j terms
-    for i in range(n_numbers):
-        for j in range(i+1, n_numbers):
-            coeff, term = create_zz_term(i, j, 2 * numbers[i] * numbers[j])
-            hamiltonian.add_term(coeff, term)
+    for i in range(n):
+        # Linear terms: 4*a_i^2 - 4*total_sum*a_i
+        coeff = 4 * (numbers[i]**2) - 4 * total_sum * numbers[i]
+        coeff_z, term_z = create_z_term(i, coeff)
+        hamiltonian.add_term(coeff_z, term_z)
+        
+    for i in range(n):
+        for j in range(i+1, n):
+            # Quadratic terms: 8*a_i*a_j
+            coeff = 8 * numbers[i] * numbers[j]
+            coeff_zz, term_zz = create_zz_term(i, j, coeff)
+            hamiltonian.add_term(coeff_zz, term_zz)
     
     return hamiltonian
 
-def get_number_partitioning_solution(bit_string: Union[str, List[int]], numbers: List[float]) -> Dict:
+def get_number_partitioning_solution(bitstring: str, numbers: List[float]) -> Dict[str, Any]:
     """
-    Get the Number Partitioning solution from a bit string.
+    Calculate the solution quality for a given bitstring.
     
     Args:
-        bit_string: Bit string or list of 0s and 1s representing the solution
+        bitstring: Binary string representation of a solution
         numbers: List of numbers to partition
         
     Returns:
-        Dictionary with solution information
+        Dictionary with solution details
     """
-    if isinstance(bit_string, str):
-        assignment = [int(bit) for bit in bit_string]
-    else:
-        assignment = bit_string
+    # Extract the binary decisions from the bitstring
+    if len(bitstring) != len(numbers):
+        raise ValueError(f"Bitstring length ({len(bitstring)}) does not match number of elements ({len(numbers)})")
     
-    # Convert binary (0,1) to spin (-1,1) for partition assignment
-    spin_assignment = [2 * bit - 1 for bit in assignment]
+    # Create the subsets
+    subset_a = [numbers[i] for i, bit in enumerate(bitstring) if bit == "1"]
+    subset_b = [numbers[i] for i, bit in enumerate(bitstring) if bit == "0"]
     
-    # Create the two subsets
-    subset_a = []
-    subset_b = []
-    for i, spin in enumerate(spin_assignment):
-        if spin == 1:
-            subset_a.append(numbers[i])
-        else:
-            subset_b.append(numbers[i])
-    
-    # Calculate sums and difference
+    # Calculate the sums
     sum_a = sum(subset_a)
     sum_b = sum(subset_b)
+    
+    # Calculate the difference (this is what we want to minimize)
     difference = abs(sum_a - sum_b)
     
-    # Create a dict for assignment
-    assignment_dict = {i: 1 if spin == 1 else 0 for i, spin in enumerate(spin_assignment)}
-    
+    # Return the solution
     return {
-        "assignment": assignment_dict,
         "subset_a": subset_a,
         "subset_b": subset_b,
         "sum_a": sum_a,
         "sum_b": sum_b,
-        "difference": difference
+        "difference": difference,
+        "bitstring": bitstring,
+        "valid": True,  # All bitstrings are valid solutions for number partitioning
+        "quality": -difference,  # Negative because we want to minimize difference
     } 

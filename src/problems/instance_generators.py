@@ -237,6 +237,13 @@ def create_number_partitioning_instance(
         NumberPartitioningProblem instance
     """
     # Import here to avoid circular imports
-    # Since there's no NumberPartitioningProblem class, we'll raise an error
-    # This will need to be implemented
-    raise NotImplementedError("NumberPartitioningProblem is not yet implemented")
+    from .number_partitioning import NumberPartitioningProblem
+    
+    if seed is not None:
+        np.random.seed(seed)
+    
+    if numbers is None:
+        # Generate random numbers
+        numbers = np.random.uniform(number_range[0], number_range[1], n_numbers)
+    
+    return NumberPartitioningProblem(numbers=numbers, name=name)

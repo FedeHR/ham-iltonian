@@ -3,6 +3,6 @@ temp/
 .pytest_cache/
 src/__pycache__/
 src/hamiltonians/__pycache__/
+src/problems/__pycache__/
 src/utils/__pycache__/
 tests/__pycache__/
-src/problems/__pycache__/

@@ -186,39 +186,47 @@ def solve_portfolio_brute_force(
 
 def solve_number_partitioning_brute_force(numbers: List[float]) -> Dict[str, Any]:
     """
-    Solve the Number Partitioning Problem using brute force.
+    Solve the Number Partitioning problem using brute force.
     
     Args:
         numbers: List of numbers to partition
         
     Returns:
-        Dictionary containing:
-            - 'bitstring': Optimal binary string representation
-            - 'assignment': Dictionary mapping indices to 0/1 values
-            - 'subset_a': Numbers in the first subset
-            - 'subset_b': Numbers in the second subset
-            - 'sum_a': Sum of the first subset
-            - 'sum_b': Sum of the second subset
-            - 'difference': Absolute difference between sums
+        Dictionary with solution details
     """
-    from ..hamiltonians.number_partitioning import get_number_partitioning_solution
+    n = len(numbers)
+    best_solution = None
+    best_difference = float('inf')
     
-    n_numbers = len(numbers)
-    min_difference = float('inf')
-    optimal_bitstring = None
-    
-    # Try all possible partitions
-    for i in range(2**n_numbers):
-        bitstring = np.binary_repr(i, width=n_numbers)
-        solution = get_number_partitioning_solution(bitstring, numbers)
+    # Brute force through all 2^n possible partitions
+    # We only need 2^(n-1) because swapping A and B gives the same difference
+    for i in range(2**(n-1)):
+        # Convert i to a binary string of length n
+        # We fix the first number to always be in set A (value 1)
+        # This halves the search space
+        bitstring = "1" + format(i, f'0{n-1}b')
         
-        # Update if better solution found
-        if solution['difference'] < min_difference:
-            min_difference = solution['difference']
-            optimal_bitstring = bitstring
-            optimal_solution = solution
+        # Create the two subsets
+        subset_a = [numbers[j] for j, bit in enumerate(bitstring) if bit == "1"]
+        subset_b = [numbers[j] for j, bit in enumerate(bitstring) if bit == "0"]
+        
+        # Calculate sums and difference
+        sum_a = sum(subset_a)
+        sum_b = sum(subset_b)
+        difference = abs(sum_a - sum_b)
+        
+        # Track the best solution found
+        if difference < best_difference:
+            best_difference = difference
+            best_solution = {
+                "subset_a": subset_a,
+                "subset_b": subset_b,
+                "sum_a": sum_a,
+                "sum_b": sum_b,
+                "difference": difference,
+                "bitstring": bitstring,
+                "valid": True,
+                "quality": -difference  # Negative because we want to minimize difference
+            }
     
-    # Add the bitstring to the solution
-    optimal_solution['bitstring'] = optimal_bitstring
-    
-    return optimal_solution 
+    return best_solution 

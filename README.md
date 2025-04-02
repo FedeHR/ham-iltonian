@@ -3,7 +3,7 @@ A Python library for encoding a variety of combinatorial optimization problems i
 
 Key features:
 - 🔄 Automatic conversion of classical problems to quantum Hamiltonians
-- 📊 Support for multiple optimization problems (MaxCut, TSP, Knapsack, Portfolio Optimization)
+- 📊 Support for multiple optimization problems (MaxCut, TSP, Knapsack, Portfolio Optimization, Number Partitioning)
 - 🔌 Integration with PennyLane for quantum simulations
 - 📈 Classical solvers included for benchmarking
 - 🎨 Built-in visualization tools for solutions
@@ -48,7 +48,8 @@ problem.print_solution("classical")
 from src.problems.instance_generators import (
     create_tsp_instance,
     create_knapsack_instance,
-    create_portfolio_instance
+    create_portfolio_instance,
+    create_number_partitioning_instance
 )
 
 # TSP with 5 cities
@@ -59,6 +60,10 @@ knapsack = create_knapsack_instance(n_items=10, max_weight=100.0, seed=42)
 
 # Portfolio with 5 assets
 portfolio = create_portfolio_instance(n_assets=5, seed=42)
+
+# Number Partitioning with 8 numbers
+numbers = [5, 8, 13, 4, 7, 10, 2, 3]
+number_partitioning = create_number_partitioning_instance(numbers=numbers, seed=42)
 ```
 
 ## References

@@ -272,6 +272,9 @@ class TSPProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
+        else:
+            plt.savefig("temp/tsp_solution.png")
+            print("Visualization saved to temp/tsp_solution.png")
         
         # Close the figure to avoid displaying in non-interactive environments
         plt.close()
@@ -370,6 +373,9 @@ class TSPProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Time effect visualization saved to {filename}")
+        else:
+            plt.savefig("temp/tsp_time_effect.png")
+            print("Visualization saved to temp/tsp_time_effect.png")
         
         # Close the figure to avoid displaying in non-interactive environments
         plt.close()

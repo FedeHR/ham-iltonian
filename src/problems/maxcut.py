@@ -117,6 +117,9 @@ class MaxCutProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
+        else:
+            plt.savefig("temp/maxcut_solution.png")
+            print("Visualization saved to temp/maxcut_solution.png")
         
         plt.show()
     

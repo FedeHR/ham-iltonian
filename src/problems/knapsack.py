@@ -138,7 +138,9 @@ class KnapsackProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
-        
+        else:
+            plt.savefig("temp/knapsack_solution.png")
+            print("Visualization saved to temp/knapsack_solution.png")
         plt.show()
     
     def __str__(self) -> str:

@@ -291,6 +291,9 @@ class PortfolioProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
+        else:
+            plt.savefig("temp/portfolio_solution.png")
+            print("Visualization saved to temp/portfolio_solution.png")
         
         # Close the figure to avoid displaying in non-interactive environments
         plt.close()
@@ -393,6 +396,9 @@ class PortfolioProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Market effect visualization saved to {filename}")
+        else:
+            plt.savefig("temp/portfolio_market_effect.png")
+            print("Visualization saved to temp/portfolio_market_effect.png")
         
         # Close the figure to avoid displaying in non-interactive environments
         plt.close()

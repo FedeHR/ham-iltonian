@@ -66,6 +66,51 @@ numbers = [5, 8, 13, 4, 7, 10, 2, 3]
 number_partitioning = create_number_partitioning_instance(numbers=numbers, seed=42)
 ```
 
+### Parametrized Hamiltonians
+
+The library supports parametrized Hamiltonians, allowing you to model problems that change based on external parameters. For example, in TSP, travel distances might vary depending on the time of day due to traffic.
+
+```python
+from src.problems.instance_generators import create_tsp_instance
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Create a TSP instance
+coordinates = [
+    (0, 0),    # City 0
+    (0, 10),   # City 1
+    (10, 10),  # City 2
+    (10, 0)    # City 3
+]
+tsp = create_tsp_instance(coordinates=coordinates, name="Time-Dependent TSP")
+
+# Create a time-dependent Hamiltonian
+time_dependent_hamiltonian = tsp.create_hamiltonian(time_dependent=True)
+
+# Solve the problem at different times of day
+print("Finding optimal routes at different times of day...")
+
+# Morning rush hour (8:00 AM)
+morning_solution = tsp.solve_with_parameters({'time': 8.0}, solution_name="morning")
+print(f"Morning route distance: {morning_solution['total_distance']:.2f}")
+
+# Mid-day (12:00 PM)
+midday_solution = tsp.solve_with_parameters({'time': 12.0}, solution_name="midday")
+print(f"Mid-day route distance: {midday_solution['total_distance']:.2f}")
+
+# Evening rush hour (5:00 PM)
+evening_solution = tsp.solve_with_parameters({'time': 17.0}, solution_name="evening")
+print(f"Evening route distance: {evening_solution['total_distance']:.2f}")
+
+# Compare solutions
+tsp.print_comparison(["morning", "midday", "evening"])
+
+# Visualize the different routes
+tsp.visualize_solution(morning_solution, filename="tsp_morning_solution.png")
+tsp.visualize_solution(midday_solution, filename="tsp_midday_solution.png")
+tsp.visualize_solution(evening_solution, filename="tsp_evening_solution.png")
+```
+
 ## References
 
 Based on the formulations described in "Ising Formulations of Many NP Problems" by Andrew Lucas (2014).

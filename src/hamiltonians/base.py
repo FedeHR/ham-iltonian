@@ -1,6 +1,7 @@
-from typing import Dict, Any, Callable
+from typing import List, Optional, Callable, Union
 import pennylane as qml
-from ..utils.pauli_utils import pauli_term_to_pennylane
+from utils.pauli_utils import pauli_terms_to_pennylane
+import numpy as np
 
 class Hamiltonian:
     """
@@ -11,102 +12,106 @@ class Hamiltonian:
         self.num_qubits = num_qubits
         self.terms = []  # List of (coefficient, pauli_term) tuples
         self.constant = 0.0  # Constant energy offset to ensure the Hamiltonian matches the objective function value
-        self.param_functions = {}  # Dictionary of parameter names to functions that modify coefficients
         self.metadata = {}
+
+        # Dictionary of parameter names to functions that modify coefficients
+        self.modifier_functions = {
+            # Default modifier functions
+            "linear": lambda coefficient, params: coefficient + params[0],
+            "quadratic": lambda coefficient, params: coefficient * (params[0] ** 2),
+            "exponential": lambda coefficient, params: coefficient * np.exp(params[0]),
+            "chaotic": lambda coefficient: coefficient * np.random.uniform(0, 1),
+        }
         
     def _update_num_qubits(self, pauli_term: str) -> None:
         """
         Update the number of qubits if the term requires more
         """
-        for char in pauli_term:
-            if char.isdigit():
-                qubit_idx = int(char)
-                self.num_qubits = max(self.num_qubits, qubit_idx + 1)
+        # Split by @ to handle multi-operator terms like "Z0@Z1" (interaction term between qubits 0 and 1)
+        individual_paulis = pauli_term.split('@')
+        
+        for pauli_str in individual_paulis:
+            # Extract the qubit index from each Pauli operator
+            qubit_idx = int(pauli_str[1:])
+            self.num_qubits = max(self.num_qubits, qubit_idx + 1)
 
     def add_term(self, coefficient: float, pauli_term: str) -> None:
         """
         Add a Pauli term to the Hamiltonian.
+        
+        Args:
+            coefficient: Coefficient for the term
+            pauli_term: Pauli term as a string (e.g., "Z0" for a single qubit Pauli Z operator, or "Z0@Z1" for an interaction term between qubits 0 and 1)
         """
         self.terms.append((coefficient, pauli_term))
         self._update_num_qubits(pauli_term)
-    
-    def add_parametric_term(self, 
-                          base_coefficient: float, 
-                          pauli_term: str, 
-                          param_name: str, 
-                          param_function: Callable[[float, Dict[str, Any]], float]) -> None:
+
+    def add_modifier_function(self, function_name: str,
+                              function: Callable[[float, Optional[Union[float, List[float]]]], float]) -> None:
         """
-        Add a parametric Pauli term to the Hamiltonian, where the coefficient depends on parameters.
-        
+        Add a custom modifier function to modify the coefficients of the Hamiltonian.
         Args:
-            base_coefficient: Base coefficient for the term before modification
-            pauli_term: Pauli term string representation
-            param_name: Name of the parameter
-            param_function: Function that takes the base coefficient and parameter values dictionary,
-                            and returns the modified coefficient
+            function_name: Name of the modifier
+            function: Function that takes a coefficient and optionally a parameter or a list of parameters and returns a modified coefficient
         """
-        self.terms.append((base_coefficient, pauli_term))
-        
-        # Store the parameter function
-        term_idx = len(self.terms) - 1
-        if param_name not in self.param_functions:
-            self.param_functions[param_name] = {}
-        
-        self.param_functions[param_name][term_idx] = param_function
-        self._update_num_qubits(pauli_term)
-    
-    def evaluate_with_parameters(self, param_values: Dict[str, Any]) -> 'Hamiltonian':
+        self.modifier_functions[function_name] = function
+
+
+    def modify_coefficients(self, modifier_name: str, *args, new_hamiltonian=True) -> Optional['Hamiltonian']:
         """
-        Evaluate the Hamiltonian with specific parameter values.
-        
+        Modify the coefficients of the Hamiltonian based on a specified modifier function and parameters.
+
         Args:
-            param_values: Dictionary of parameter names to values
-            
+            modifier_name: Name of the registered modifier function to apply
+            args: Parameters for the modifier function
+            new_hamiltonian: If True, return a new Hamiltonian with modified coefficients;
+                if False, modify the current Hamiltonian in place
+
         Returns:
-            A new Hamiltonian with coefficients computed based on parameters
+            A new Hamiltonian with modified coefficients if new_hamiltonian is True, None otherwise
+
+        Raises:
+            ValueError: If the modifier_name is not registered
         """
-        new_hamiltonian = Hamiltonian(self.num_qubits)
-        new_hamiltonian.constant = self.constant
-        new_hamiltonian.metadata = self.metadata.copy()
-        
-        # Add all terms with possibly modified coefficients
-        for idx, (coefficient, pauli_term) in enumerate(self.terms):
-            new_coeff = coefficient
-            
-            # Check if this term depends on any parameters
-            for param_name, term_dict in self.param_functions.items():
-                if idx in term_dict and param_name in param_values:
-                    param_func = term_dict[idx]
-                    new_coeff = param_func(new_coeff, param_values)
-            
-            new_hamiltonian.add_term(new_coeff, pauli_term)
-        return new_hamiltonian
+        if modifier_name not in self.modifier_functions:
+            raise ValueError(f"Unknown modifier '{modifier_name}'. "
+                             f"Available modifiers: {list(self.modifier_functions.keys())}")
+
+        modifier_func = self.modifier_functions[modifier_name]
+        modified_terms = [(modifier_func(coefficient, args), pauli_term) for coefficient, pauli_term in self.terms]
+
+        if new_hamiltonian:
+            new_hamiltonian = Hamiltonian(self.num_qubits)
+            new_hamiltonian.terms = modified_terms
+            new_hamiltonian.constant = self.constant
+            new_hamiltonian.metadata = self.metadata.copy()
+            return new_hamiltonian
+        else:
+            self.terms = modified_terms
         
     def to_pennylane(self) -> qml.Hamiltonian:
-        coefficients = []
-        pauli_terms = []
+        """
+        Convert this Hamiltonian to a PennyLane Hamiltonian.
         
-        # First process all non-identity terms
-        for coefficient, pauli_term in self.terms:
-            if ',' in pauli_term:
-                # This is a ZZ term from the utility function
-                # Need to process differently
-                i, j = map(int, pauli_term.split(','))
-                pauli_terms.append([f"Z{i}", f"Z{j}"])
-            else:
-                # Regular term
-                pauli_terms.append([pauli_term])
-            coefficients.append(coefficient)
+        Returns:
+            A PennyLane Hamiltonian object
+        """
+        coefficients = [coeff for coeff, _ in self.terms]
+        pauli_terms = [[term] for _, term in self.terms]  # Wrap each term in a list to later handle multi-operator terms with a simple product operator
         
-        # Add the constant term if non-zero
         if self.constant != 0:
             coefficients.append(self.constant)
-            pauli_terms.append([])  # Empty list for the identity term
+            pauli_terms.append(["Identity"])
         
-        # Convert to PennyLane representation
-        return pauli_term_to_pennylane(coefficients, pauli_terms)
+        return pauli_terms_to_pennylane(coefficients, pauli_terms)
     
     def add_constant(self, value: float) -> None:
+        """
+        Add a constant term to the Hamiltonian.
+        
+        Args:
+            value: Constant value to add
+        """
         self.constant += value
     
     def __str__(self) -> str:
@@ -124,21 +129,13 @@ class Hamiltonian:
                 continue
                 
             # Handle the sign
-            if terms_strs and coefficient > 0:
-                term_str = f"+ {abs(coefficient)}"
-            elif coefficient < 0:
-                term_str = f"- {abs(coefficient)}"
+            if terms_strs and coefficient >= 0:
+                term_str = f"+ {abs(coefficient):.2f}"
             else:
-                term_str = f"{coefficient}"
+                term_str = f"- {abs(coefficient):.2f}"
             
-            # Add the Pauli operator if it's not just a constant
-            if ',' in pauli_term:
-                # ZZ term from utility function
-                i, j = map(int, pauli_term.split(','))
-                term_str += f" Z{i}Z{j}"
-            else:
-                term_str += f" {pauli_term}"
-                
+            # Add the Pauli operator
+            term_str += f" * {pauli_term}"
             terms_strs.append(term_str)
         
         # Add the constant term if non-zero
@@ -166,9 +163,6 @@ class Hamiltonian:
         Returns:
             Sum of the two Hamiltonians
         """
-        if not isinstance(other, Hamiltonian):
-            raise TypeError("Can only add Hamiltonians together")
-        
         # Create a new Hamiltonian with the combined number of qubits
         result = Hamiltonian(max(self.num_qubits, other.num_qubits))
         
@@ -183,20 +177,12 @@ class Hamiltonian:
         # Add the constants
         result.constant = self.constant + other.constant
         
-        # Combine parameter functions
-        for param_name, term_dict in self.param_functions.items():
-            if param_name not in result.param_functions:
-                result.param_functions[param_name] = {}
-            for term_idx, param_func in term_dict.items():
-                result.param_functions[param_name][term_idx] = param_func
+        # Copy all modifier functions
+        result.modifier_functions = self.modifier_functions.copy()
+        result.modifier_functions.update(other.modifier_functions)
         
-        for param_name, term_dict in other.param_functions.items():
-            if param_name not in result.param_functions:
-                result.param_functions[param_name] = {}
-            for term_idx, param_func in term_dict.items():
-                # Adjust term indices from other
-                adjusted_idx = term_idx + len(self.terms)
-                result.param_functions[param_name][adjusted_idx] = param_func
+        # Copy metadata
+        result.metadata = {**self.metadata, **other.metadata}
         
         return result
     
@@ -210,9 +196,6 @@ class Hamiltonian:
         Returns:
             Scaled Hamiltonian
         """
-        if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply Hamiltonian by a scalar")
-        
         # Create a new Hamiltonian with the same number of qubits
         result = Hamiltonian(self.num_qubits)
         
@@ -223,15 +206,11 @@ class Hamiltonian:
         # Scale the constant
         result.constant = self.constant * scalar
         
-        # Adjust parameter functions
-        for param_name, term_dict in self.param_functions.items():
-            if param_name not in result.param_functions:
-                result.param_functions[param_name] = {}
-            for term_idx, param_func in term_dict.items():
-                # Create a new function that includes the scalar
-                def scaled_func(coeff, params, orig_func=param_func, scale=scalar):
-                    return orig_func(coeff / scale, params) * scale
-                result.param_functions[param_name][term_idx] = scaled_func
+        # Copy modifier functions
+        result.modifier_functions = self.modifier_functions.copy()
+        
+        # Copy metadata
+        result.metadata = self.metadata.copy()
         
         return result
     
@@ -246,3 +225,4 @@ class Hamiltonian:
             Scaled Hamiltonian
         """
         return self.__mul__(scalar) 
+        

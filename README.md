@@ -1,8 +1,8 @@
 # 🍖⚛️ ham-iltonian
-A Python library for encoding a variety of combinatorial optimization problems into quantum Hamiltonians. The Hamiltonians have the ability to be parametrized, reflecting the effect of different factors, such as time, in challenges like TSP, MaxCut, Knapsack and Portfolio Optimization.
+A Python library for encoding a variety of combinatorial optimization problems in the form of Ising Hamiltonians, based on the formulations described in "Ising Formulations of Many NP Problems" by Andrew Lucas (2014). The Hamiltonians have the ability to be parametrized, reflecting the effect of different factors, such as time, in challenges like TSP, MaxCut, Knapsack and Portfolio Optimization.
 
 Key features:
-- 🔄 Automatic conversion of classical problems to quantum Hamiltonians
+- 🔄 Automatic conversion of classical problems to Ising Hamiltonians
 - 📊 Support for multiple optimization problems (MaxCut, TSP, Knapsack, Portfolio Optimization, Number Partitioning)
 - 🔌 Integration with PennyLane for quantum simulations
 - 📈 Classical solvers included for benchmarking
@@ -10,7 +10,7 @@ Key features:
 - ⚡ Parametrized Hamiltonian support for dynamic problems (dynamic time, risk factors, or any other desired parameter)
 - 🧩 Easy problem instance generation with utility functions
 
-Perfect for researchers and developers working at the intersection of quantum computing and optimization problems.
+Useful for researchers and developers working at the intersection of quantum computing and combinatorial optimization problems.
 
 ## Installation
 
@@ -25,7 +25,7 @@ pip install -r requirements.txt
 from src.problems.instance_generators import create_maxcut_instance
 
 # Create a problem with 5 nodes
-problem = create_maxcut_instance(
+maxcut = create_maxcut_instance(
     n_nodes=5,
     edge_probability=0.7,
     weight_range=(0.5, 2.0),
@@ -34,12 +34,30 @@ problem = create_maxcut_instance(
 )
 
 # Create the corresponding Hamiltonian
-hamiltonian = problem.create_hamiltonian()
+maxcut.build_hamiltonian()
+hamiltonian = maxcut.hamiltonian
 print(hamiltonian)
 
 # Solve classically for comparison
-solution = problem.solve_classically()
-problem.print_solution("classical")
+solution = maxcut.solve_classically()
+print(solution)
+
+# Visualize the solution
+problem.visualize_solution(solution)
+```
+
+### Parameter Modification
+
+```python
+# Modify parameters of the problem, the Hamiltonian will be automatically rebuilt
+problem.modify_parameters("edge_density_scaling", 1.5)
+
+# Solve again with modified parameters
+modified_solution = problem.solve_classically()
+print(modified_solution)
+
+# Reset to original parameters
+problem.reset_parameters()
 ```
 
 ### Other problem types
@@ -66,49 +84,15 @@ numbers = [5, 8, 13, 4, 7, 10, 2, 3]
 number_partitioning = create_number_partitioning_instance(numbers=numbers, seed=42)
 ```
 
-### Parametrized Hamiltonians
+### Evaluating Solutions
 
-The library supports parametrized Hamiltonians, allowing you to model problems that change based on external parameters. For example, in TSP, travel distances might vary depending on the time of day due to traffic.
+You can evaluate any potential solution using the provided methods:
 
 ```python
-from src.problems.instance_generators import create_tsp_instance
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Create a TSP instance
-coordinates = [
-    (0, 0),    # City 0
-    (0, 10),   # City 1
-    (10, 10),  # City 2
-    (10, 0)    # City 3
-]
-tsp = create_tsp_instance(coordinates=coordinates, name="Time-Dependent TSP")
-
-# Create a time-dependent Hamiltonian
-time_dependent_hamiltonian = tsp.create_hamiltonian(time_dependent=True)
-
-# Solve the problem at different times of day
-print("Finding optimal routes at different times of day...")
-
-# Morning rush hour (8:00 AM)
-morning_solution = tsp.solve_with_parameters({'time': 8.0}, solution_name="morning")
-print(f"Morning route distance: {morning_solution['total_distance']:.2f}")
-
-# Mid-day (12:00 PM)
-midday_solution = tsp.solve_with_parameters({'time': 12.0}, solution_name="midday")
-print(f"Mid-day route distance: {midday_solution['total_distance']:.2f}")
-
-# Evening rush hour (5:00 PM)
-evening_solution = tsp.solve_with_parameters({'time': 17.0}, solution_name="evening")
-print(f"Evening route distance: {evening_solution['total_distance']:.2f}")
-
-# Compare solutions
-tsp.print_comparison(["morning", "midday", "evening"])
-
-# Visualize the different routes
-tsp.visualize_solution(morning_solution, filename="tsp_morning_solution.png")
-tsp.visualize_solution(midday_solution, filename="tsp_midday_solution.png")
-tsp.visualize_solution(evening_solution, filename="tsp_evening_solution.png")
+# Evaluate a specific bit assignment
+bitstring = "10110"  # For a 5-node MaxCut problem
+evaluation = problem.evaluate_bitstring(bitstring)
+print(f"Cut value for {bitstring}: {evaluation['cut_value']}")
 ```
 
 ## References

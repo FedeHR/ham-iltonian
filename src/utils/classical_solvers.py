@@ -6,7 +6,7 @@ the optimization problems supported by the library.
 """
 import numpy as np
 import networkx as nx
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Dict, List, Any, Tuple
 import itertools
 
 def solve_maxcut_brute_force(graph: nx.Graph) -> Dict[str, Any]:
@@ -23,25 +23,59 @@ def solve_maxcut_brute_force(graph: nx.Graph) -> Dict[str, Any]:
             - 'partition': List of two sets containing the nodes in each partition
             - 'cut_value': Value of the maximum cut
     """
-    from ..hamiltonians.maxcut import get_maxcut_solution
-    
     n_nodes = graph.number_of_nodes()
     optimal_cut = -float('inf')
     optimal_bitstring = None
+    optimal_assignment = None
+    optimal_partition = None
     
     # Try all possible bitstrings
     for i in range(2**n_nodes):
         bitstring = np.binary_repr(i, width=n_nodes)
-        solution = get_maxcut_solution(bitstring, graph)
-        if solution['cut_value'] > optimal_cut:
-            optimal_cut = solution['cut_value']
+        assignment = [int(bit) for bit in bitstring]
+
+        assignment_dict, cut_value, set_0, set_1 = evaluate_mc_solution(assignment, graph)
+
+        if cut_value > optimal_cut:
+            optimal_cut = cut_value
             optimal_bitstring = bitstring
-            optimal_solution = solution
+            optimal_assignment = assignment_dict
+            optimal_partition = [set_0, set_1]
     
-    # Add the bitstring to the solution
-    optimal_solution['bitstring'] = optimal_bitstring
-    
-    return optimal_solution
+    return {
+        "bitstring": optimal_bitstring,
+        "assignment": optimal_assignment,
+        "partition": optimal_partition,
+        "cut_value": optimal_cut
+    }
+
+
+def evaluate_mc_solution(assignment: List[int], graph: nx.Graph):
+    assignment_dict = convert_mc_bitstring_to_dict(assignment)
+    set_0, set_1 = extract_mc_partitions(assignment_dict)
+    cut_value = calculate_mc_value(graph, set_0, set_1)
+    return assignment_dict, cut_value, set_0, set_1
+
+
+def calculate_mc_value(graph: nx.Graph, set_0: List[int], set_1: List[int]) -> float:
+    cut_value = 0.0
+    for u, v, attr in graph.edges(data=True):
+        weight = attr.get('weight', 1.0)
+        if (u in set_0 and v in set_1) or (u in set_1 and v in set_0):
+            cut_value += weight
+    return cut_value
+
+
+def extract_mc_partitions(assignment: Dict[int, int]) -> Tuple[List[int], List[int]]:
+    set_0 = [node for node, partition in assignment.items() if partition == 0]
+    set_1 = [node for node, partition in assignment.items() if partition == 1]
+    return set_0, set_1
+
+
+def convert_mc_bitstring_to_dict(assignment: List[int]) -> Dict[int, int]:
+    assignment_dict = {node: partition for node, partition in enumerate(assignment)}
+    return assignment_dict
+
 
 def solve_tsp_brute_force(distances: np.ndarray) -> Dict[str, Any]:
     """
@@ -57,8 +91,6 @@ def solve_tsp_brute_force(distances: np.ndarray) -> Dict[str, Any]:
             - 'total_distance': Total distance of the optimal tour
             - 'valid': True (always valid for brute force solution)
     """
-    from ..hamiltonians.tsp import get_tsp_solution
-    
     n_cities = distances.shape[0]
     optimal_distance = float('inf')
     optimal_tour = None
@@ -87,9 +119,13 @@ def solve_tsp_brute_force(distances: np.ndarray) -> Dict[str, Any]:
     
     optimal_bitstring = ''.join(bitstring)
     
-    # Convert back to solution format
-    solution = get_tsp_solution(optimal_bitstring, n_cities, distances)
-    solution['bitstring'] = optimal_bitstring
+    # Create solution dictionary directly
+    solution = {
+        'bitstring': optimal_bitstring,
+        'tour': list(optimal_tour),
+        'total_distance': optimal_distance,
+        'valid': True
+    }
     
     return solution
 
@@ -110,8 +146,6 @@ def solve_knapsack_brute_force(values: List[float], weights: List[float], capaci
             - 'total_weight': Total weight of the optimal solution
             - 'valid': True (always valid for brute force solution)
     """
-    from ..hamiltonians.knapsack import get_knapsack_solution
-    
     n_items = len(values)
     optimal_value = -float('inf')
     optimal_bitstring = None
@@ -119,18 +153,29 @@ def solve_knapsack_brute_force(values: List[float], weights: List[float], capaci
     # Try all possible item combinations
     for i in range(2**n_items):
         bitstring = np.binary_repr(i, width=n_items)
-        solution = get_knapsack_solution(bitstring, values, weights, capacity)
+        
+        # Calculate value and weight
+        selected_items = [j for j, bit in enumerate(bitstring) if bit == '1']
+        total_value = sum(values[j] for j in selected_items)
+        total_weight = sum(weights[j] for j in selected_items)
         
         # Only consider valid solutions
-        if solution['valid'] and solution['total_value'] > optimal_value:
-            optimal_value = solution['total_value']
+        if total_weight <= capacity and total_value > optimal_value:
+            optimal_value = total_value
             optimal_bitstring = bitstring
     
     # Get the full solution details
-    optimal_solution = get_knapsack_solution(optimal_bitstring, values, weights, capacity)
-    optimal_solution['bitstring'] = optimal_bitstring
+    selected_items = [i for i, bit in enumerate(optimal_bitstring) if bit == '1']
+    total_value = sum(values[i] for i in selected_items)
+    total_weight = sum(weights[i] for i in selected_items)
     
-    return optimal_solution
+    return {
+        'bitstring': optimal_bitstring,
+        'selected_items': selected_items,
+        'total_value': total_value,
+        'total_weight': total_weight,
+        'valid': True
+    }
 
 def solve_portfolio_brute_force(
     returns: List[float], 
@@ -157,30 +202,48 @@ def solve_portfolio_brute_force(
             - 'objective': Combined objective value (return - risk_factor * risk)
             - 'valid': True (always valid for brute force solution)
     """
-    from ..hamiltonians.portfolio import get_portfolio_solution
-    
     n_assets = len(returns)
     optimal_objective = -float('inf')
     optimal_bitstring = None
+    optimal_solution = None
     
     # Try all possible asset combinations
     for i in range(2**n_assets):
         bitstring = np.binary_repr(i, width=n_assets)
-        solution = get_portfolio_solution(bitstring, returns, risk_matrix, budget)
         
-        # Only consider valid solutions
-        if solution['valid']:
-            # Calculate objective: maximize return while minimizing risk
-            objective = solution['expected_return'] - risk_factor * solution['risk']
+        # Extract selected assets
+        selected_assets = [j for j, bit in enumerate(bitstring) if bit == '1']
+        total_selected = len(selected_assets)
+        
+        # Check if solution meets budget constraint
+        if total_selected > budget:
+            continue
             
-            if objective > optimal_objective:
-                optimal_objective = objective
-                optimal_bitstring = bitstring
-    
-    # Get the full solution details
-    optimal_solution = get_portfolio_solution(optimal_bitstring, returns, risk_matrix, budget)
-    optimal_solution['bitstring'] = optimal_bitstring
-    optimal_solution['objective'] = optimal_objective
+        # Calculate expected return
+        expected_return = sum(returns[j] for j in selected_assets)
+        
+        # Calculate risk (portfolio variance)
+        risk = 0.0
+        for i in selected_assets:
+            for j in selected_assets:
+                risk += risk_matrix[i, j]
+        
+        # Calculate objective: maximize return while minimizing risk
+        objective = expected_return - risk_factor * risk
+        
+        # Update if better solution found
+        if objective > optimal_objective:
+            optimal_objective = objective
+            optimal_bitstring = bitstring
+            optimal_solution = {
+                'bitstring': bitstring,
+                'selected_assets': selected_assets,
+                'total_selected': total_selected,
+                'expected_return': expected_return,
+                'risk': risk,
+                'objective': objective,
+                'valid': True
+            }
     
     return optimal_solution
 

@@ -1,12 +1,10 @@
 """
-Utility functions for graph creation and manipulation.
-
 This module provides helper functions for creating and manipulating graphs for various
 optimization problems.
 """
 import networkx as nx
 import numpy as np
-from typing import List, Tuple, Dict, Any, Optional, Union
+from typing import List, Tuple, Optional
 
 def create_random_weighted_graph(n_nodes: int, 
                                 edge_probability: float = 0.5, 
@@ -22,7 +20,7 @@ def create_random_weighted_graph(n_nodes: int,
         seed: Random seed for reproducibility
         
     Returns:
-        NetworkX graph with random weighted edges
+        Erdos-Renyi graph with random weighted edges
     """
     if seed is not None:
         np.random.seed(seed)

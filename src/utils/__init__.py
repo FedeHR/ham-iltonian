@@ -5,7 +5,7 @@ Utility functions for CO Hamiltonians.
 from .pauli_utils import (
     create_z_term,
     create_zz_term,
-    pauli_term_to_pennylane
+    pauli_terms_to_pennylane
 )
 
 from .classical_solvers import (

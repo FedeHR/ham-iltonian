@@ -1,11 +1,9 @@
 """
 Base class for combinatorial optimization problems.
 """
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 import numpy as np
-import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
-from hamiltonians.base import Hamiltonian
 
 class Problem(ABC):
     """
@@ -26,34 +24,61 @@ class Problem(ABC):
         self.hamiltonian = None
         self.solutions = {}
         self.metadata = {}
-        self.parameters = {}
+        
+        # Dictionary of parameter modifier functions
+        self.modifier_functions = {
+            # Default modifier functions
+            "linear": lambda value, param: value + param,
+            "quadratic": lambda value, param: value * (param ** 2),
+            "exponential": lambda value, param: value * np.exp(param),
+        }
     
-    @abstractmethod
-    def create_hamiltonian(self, **kwargs) -> Hamiltonian:
+    def add_modifier_function(self, function_name: str, 
+                             function: Callable[[float, Any], float]) -> None:
         """
-        Create the Hamiltonian for this problem.
+        Add a custom modifier function to modify problem parameters.
         
         Args:
-            **kwargs: Problem-specific parameters
-            
-        Returns:
-            Hamiltonian representation of the problem
+            function_name: Name of the modifier
+            function: Function that takes a problem parameter to be modified and optionally additional arguments
+                      for the calculation, returns the modified problem parameter
         """
-        pass
-    
-    def modify_hamiltonian(self, modifier_name: str, *args) -> None:
+        self.modifier_functions[function_name] = function
+
+    def modify_parameters(self, modifier_name: str, *args) -> None:
         """
-        Modify the Hamiltonian coefficients and update the problem state accordingly.
+        Modify the problem parameters using the specified modifier function.
         
         Args:
             modifier_name: Name of the modifier function to apply
             *args: Parameters for the modifier function
         """
-        if not self.hamiltonian:
-            raise ValueError("Hamiltonian has not been created yet. Call create_hamiltonian() first.")
-            
-        # Modify the Hamiltonian
-        self.hamiltonian.modify_coefficients(modifier_name, *args, new_hamiltonian=False)
+        if modifier_name not in self.modifier_functions:
+            raise ValueError(f"Unknown modifier '{modifier_name}'. "
+                             f"Available modifiers: {list(self.modifier_functions.keys())} "
+                             f"or define your own modifier function using add_modifier_function.")
+        
+        # Apply the parameter-specific modification logic
+        self._apply_modifier(modifier_name, *args)
+        self.build_hamiltonian()
+    
+    @abstractmethod
+    def _apply_modifier(self, modifier_name: str, *args) -> None:
+        """
+        Apply the modifier to the problem parameters.
+        
+        Args:
+            modifier_name: Name of the modifier function to apply
+            *args: Parameters for the modifier function
+        """
+        pass
+    
+    @abstractmethod
+    def build_hamiltonian(self) -> None:
+        """
+        Create the Hamiltonian for this problem.
+        """
+        pass
     
     @abstractmethod
     def solve_classically(self, **kwargs) -> Dict[str, Any]:
@@ -67,49 +92,15 @@ class Problem(ABC):
             Dictionary with solution details
         """
         pass
-    
-    # def solve_with_parameters(self, param_values: Dict[str, Any], solution_name: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-    #     """
-    #     Solve the problem with specific parameter values.
-    #
-    #     Args:
-    #         param_values: Dictionary of parameter values to apply
-    #         solution_name: Name to assign to the solution (default: based on param values)
-    #         **kwargs: Problem-specific parameters
-    #
-    #     Returns:
-    #         Dictionary with solution details
-    #     """
-    #     # Store current parameter values
-    #     self.parameters = param_values.copy()
-    #
-    #     # Create the parameterized Hamiltonian
-    #     self.create_parameterized_hamiltonian(param_values, **kwargs)
-    #
-    #     # Solve the problem
-    #     solution = self.solve_classically(**kwargs)
-    #
-    #     # If solution_name wasn't provided, generate one from parameters
-    #     if solution_name is None:
-    #         param_str = "_".join([f"{k}_{v}" for k, v in param_values.items()])
-    #         solution_name = f"param_{param_str}"
-    #
-    #     # Add parameter values to the solution
-    #     solution["parameters"] = param_values.copy()
-    #
-    #     # Store the solution
-    #     self.add_solution(solution_name, solution)
-    #
-    #     return solution
-    
+
     @abstractmethod
-    def get_solution_from_bitstring(self, bitstring: str) -> Dict[str, Any]:
+    def evaluate_bitstring(self, bitstring: str) -> Dict[str, Any]:
         """
         Get the solution from a bitstring.
-        
+
         Args:
             bitstring: Binary string representation of the solution
-            
+
         Returns:
             Dictionary with solution details
         """
@@ -140,78 +131,6 @@ class Problem(ABC):
             filename: Optional filename to save the visualization
         """
         pass
-    #
-    # def visualize_parameter_effect(self,
-    #                             param_name: str,
-    #                             param_values: List[Any],
-    #                             metric_name: Optional[str] = None,
-    #                             filename: Optional[str] = None) -> None:
-    #     """
-    #     Visualize how a parameter affects solution quality.
-    #
-    #     Args:
-    #         param_name: Name of the parameter to vary
-    #         param_values: List of values to try for the parameter
-    #         metric_name: Name of the metric to plot (default: quality)
-    #         filename: Optional filename to save the visualization
-    #     """
-    #     # Set default metric to quality if none provided
-    #     if metric_name is None:
-    #         metric_name = "quality"
-    #         metric_func = self.calculate_quality
-    #     else:
-    #         # Try to find the metric in the solution dictionary
-    #         def metric_func(solution):
-    #             return solution.get(metric_name, float('nan'))
-    #
-    #     # Solve the problem for each parameter value
-    #     metrics = []
-    #     used_values = []
-    #
-    #     for value in param_values:
-    #         # Create a parameter dictionary with this value
-    #         params = {param_name: value}
-    #         solution_name = f"{param_name}_{value}"
-    #
-    #         # Check if we already have this solution
-    #         existing_solution = self.get_solution(solution_name)
-    #         if existing_solution:
-    #             solution = existing_solution
-    #         else:
-    #             # Solve with this parameter value
-    #             solution = self.solve_with_parameters(params, solution_name)
-    #
-    #         # Extract the metric
-    #         metric = metric_func(solution)
-    #
-    #         if not np.isnan(metric):
-    #             metrics.append(metric)
-    #             used_values.append(value)
-    #
-    #     # Plot the results
-    #     plt.figure(figsize=(10, 6))
-    #     plt.plot(used_values, metrics, 'o-', linewidth=2)
-    #     plt.xlabel(param_name)
-    #     plt.ylabel(metric_name)
-    #     plt.title(f"Effect of {param_name} on {metric_name}")
-    #     plt.grid(True)
-    #
-    #     if filename:
-    #         plt.savefig(filename)
-    #         print(f"Visualization saved to {filename}")
-    #
-    #     # Close the figure to avoid displaying in non-interactive environments
-    #     plt.close()
-    
-    def add_solution(self, name: str, solution: Dict[str, Any]) -> None:
-        """
-        Add a solution to the problem's solution dictionary.
-        
-        Args:
-            name: Name for the solution
-            solution: Solution dictionary
-        """
-        self.solutions[name] = solution
     
     def get_solution(self, name: str) -> Optional[Dict[str, Any]]:
         """
@@ -224,6 +143,34 @@ class Problem(ABC):
             Solution dictionary, or None if not found
         """
         return self.solutions.get(name)
+
+    def get_modifier_functions(self) -> Dict[str, Callable]:
+        """
+        Get the available modifier functions.
+
+        Returns:
+            Dictionary of modifier functions
+        """
+        return self.modifier_functions
+    
+    def print_modifier_functions(self, verbose: bool = False) -> None:
+        """
+        Print the available modifier functions in a readable format.
+        
+        Args:
+            verbose: If True, attempts to print the function code as well
+        """
+        print(f"\nAvailable modifier functions for {self.name}:")
+        for name, func in self.modifier_functions.items():
+            print(f"  * {name}")
+            if verbose:
+                import inspect
+                try:
+                    source = inspect.getsource(func)
+                    print(f"\n    Code: {source.strip()}")
+                    print("----------------------------------------\n")
+                except (TypeError, OSError):
+                    print(f"    Code: <Built-in function, source not available>")
     
     def compare_solutions(self, names: List[str]) -> Dict[str, Any]:
         """
@@ -255,13 +202,6 @@ class Problem(ABC):
         
         return comparison
     
-    def print_info(self) -> None:
-        """
-        Print general information about the problem.
-        This method prints the problem's string representation.
-        """
-        print(self)
-    
     def print_hamiltonian(self, truncate: bool = False, max_length: int = 500) -> None:
         """
         Print the Hamiltonian for this problem.
@@ -271,7 +211,7 @@ class Problem(ABC):
             max_length: Maximum length to print if truncating
         """
         if self.hamiltonian is None:
-            print("Hamiltonian has not been created yet. Call create_hamiltonian() first.")
+            print("Hamiltonian has not been created yet. Call build_hamiltonian() first.")
             return
         
         print(f"\n{self.name} Hamiltonian:")
@@ -287,7 +227,7 @@ class Problem(ABC):
         Print the PennyLane Hamiltonian representation.
         """
         if self.hamiltonian is None:
-            print("Hamiltonian has not been created yet. Call create_hamiltonian() first.")
+            print("Hamiltonian has not been created yet. Call build_hamiltonian() first.")
             return
         
         print(f"\n{self.name} PennyLane Hamiltonian:")
@@ -356,46 +296,7 @@ class Problem(ABC):
                 ratio = comparison[name]['ratio']
                 star = "*" if name == best_name else " "
                 print(f"{name:<15} {quality:<10.4f} {ratio:<10.4f} {star}")
-    
-    def test_bitstrings(self, bitstrings: List[str], name_prefix: str = "test") -> List[str]:
-        """
-        Test multiple bitstrings and add them as solutions.
-        
-        Args:
-            bitstrings: List of bitstrings to test
-            name_prefix: Prefix for solution names
-            
-        Returns:
-            List of solution names that were added
-        """
-        solution_names = []
-        
-        for i, bitstring in enumerate(bitstrings):
-            solution_name = f"{name_prefix}_{i}"
-            solution = self.get_solution_from_bitstring(bitstring)
-            
-            # Add the bitstring to the solution for reference
-            solution["bitstring"] = bitstring
-            
-            # Calculate the quality
-            quality = self.calculate_quality(solution)
-            solution["quality"] = quality
-            
-            # Add the solution
-            self.add_solution(solution_name, solution)
-            solution_names.append(solution_name)
-            
-            print(f"\nSolution {solution_name}:")
-            print(f"Bitstring: {bitstring}")
-            print(f"Quality: {quality:.4f}")
-            
-            # Print other relevant solution details
-            for key, value in solution.items():
-                if key not in ["bitstring", "quality"]:
-                    print(f"{key}: {value}")
-        
-        return solution_names
-    
+
     def __str__(self) -> str:
         """
         Return a string representation of the problem.

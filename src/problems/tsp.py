@@ -1,16 +1,15 @@
 """
 Traveling Salesman Problem (TSP) implementation.
 """
-import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Optional, Union, Any
-import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
+from typing import Dict, List, Optional, Any
 
-from .base import Problem
-from ..hamiltonians.tsp import create_tsp_hamiltonian, get_tsp_solution
-from ..utils.classical_solvers import solve_tsp_brute_force
+from problems.base import Problem
+from hamiltonian import Hamiltonian
+from utils.pauli_utils import create_z_term, create_zz_term
+from utils.classical_solvers import solve_tsp_brute_force
+from parameter_modifiers.tsp import get_modifiers
 
 class TSPProblem(Problem):
     """
@@ -22,21 +21,50 @@ class TSPProblem(Problem):
     
     def __init__(
         self, 
-        distances: np.ndarray, 
+        distances: Optional[np.ndarray] = None, 
+        positions: Optional[np.ndarray] = None,
         city_names: Optional[List[str]] = None,
-        city_positions: Optional[np.ndarray] = None,
+        distance_metric: str = "euclidean",
         name: str = "TSP"
     ):
         """
         Initialize a TSP problem.
         
         Args:
-            distances: Distance matrix between cities (n x n)
+            distances: Distance matrix between cities (n x n). Optional if positions is provided.
+            positions: Array of city positions (n x 2 or n x 3). Optional if distances is provided.
             city_names: Optional list of city names
-            city_positions: Optional array of city positions for visualization
+            distance_metric: Metric to use when calculating distances from positions. Options: 'euclidean', 'manhattan'
             name: Name of the problem instance
+            
+        Raises:
+            ValueError: If neither distances nor positions are provided
         """
         super().__init__(name)
+        
+        # Check that at least one of distances or positions is provided
+        if distances is None and positions is None:
+            raise ValueError("At least one of distances or positions must be provided")
+        
+        # If positions are provided but not distances, calculate distances
+        if distances is None and positions is not None:
+            n_cities = positions.shape[0]
+            distances = np.zeros((n_cities, n_cities))
+            
+            # Calculate distances based on the specified metric
+            for i in range(n_cities):
+                for j in range(n_cities):
+                    if i != j:
+                        if distance_metric == 'euclidean':
+                            # Euclidean distance
+                            distances[i, j] = np.sqrt(np.sum((positions[i] - positions[j])**2))
+                        elif distance_metric == 'manhattan':
+                            # Manhattan distance
+                            distances[i, j] = np.sum(np.abs(positions[i] - positions[j]))
+                        else:
+                            # Default to Euclidean
+                            distances[i, j] = np.sqrt(np.sum((positions[i] - positions[j])**2))
+        
         self.distances = distances
         self.n_cities = distances.shape[0]
         
@@ -57,118 +85,146 @@ class TSPProblem(Problem):
                 raise ValueError("Number of city names must match number of cities")
             self.city_names = city_names
         
-        # Set city positions if not provided (for visualization)
-        if city_positions is None:
-            # Generate random positions in 2D plane
-            self.city_positions = np.random.rand(self.n_cities, 2)
+        # Set city positions for visualization
+        if positions is not None:
+            if positions.shape[0] != self.n_cities:
+                raise ValueError("Number of positions must match number of cities")
+            self.city_positions = positions
         else:
-            if city_positions.shape[0] != self.n_cities:
-                raise ValueError("Number of city positions must match number of cities")
-            self.city_positions = city_positions
+            # Generate random positions in 2D plane if not provided
+            self.city_positions = np.random.rand(self.n_cities, 2)
+            
+        # Set default coefficients
+        self.A = 2.0 * np.max(self.distances) * self.n_cities  # Constraint coefficient
+        self.B = 1.0  # Distance coefficient
+        
+        # Store original distances for parameter resets
+        self.original_distances = self.distances.copy()
+        
+        # Register modifiers
+        default_modifiers = get_modifiers()
+        self.modifier_functions.update(default_modifiers)
+        
+        # Build the initial Hamiltonian
+        self.build_hamiltonian()
     
-    def create_hamiltonian(self, A: float = None, B: float = None, time_dependent: bool = False) -> Any:
+    def _apply_modifier(self, modifier_name: str, *args) -> None:
         """
-        Create the Hamiltonian for this TSP problem.
+        Apply the modifier to the problem parameters.
         
         Args:
-            A: Coefficient for the constraint terms (default: automatically calculated)
-            B: Coefficient for the distance term (default: 1.0)
-            time_dependent: Whether to create a time-dependent Hamiltonian
-            
-        Returns:
-            Hamiltonian for the TSP problem
+            modifier_name: Name of the modifier function to apply
+            *args: Parameters for the modifier function
         """
-        # Set default penalty coefficients if not provided
-        if A is None:
-            A = np.max(self.distances) * 2
-        if B is None:
-            B = np.max(self.distances) * 2
-            
-        self._hamiltonian = create_tsp_hamiltonian(
-            self.distances, 
-            A=A, 
-            B=B,
-            time_dependent=time_dependent
-        )
-        return self._hamiltonian
+        modifier_func = self.modifier_functions[modifier_name]
+        
+        # Apply modifier to all distances
+        for i in range(self.n_cities):
+            for j in range(self.n_cities):
+                if i != j:  # Skip diagonal elements
+                    self.distances[i, j] = modifier_func(self.original_distances[i, j], *args)
+        
+        # Update metadata
+        self.metadata["distance_range"] = [float(np.min(self.distances)), float(np.max(self.distances))]
+        self.metadata["avg_distance"] = float(np.mean(self.distances))
+        
+        # Rebuild A coefficient based on new max distance
+        self.A = 2.0 * np.max(self.distances) * self.n_cities
     
-    def solve_classically(self, time_of_day: Optional[float] = None) -> Dict[str, Any]:
+    def build_hamiltonian(self) -> None:
+        """
+        Build the Hamiltonian for this TSP problem following Lucas (2014) formulation.
+        
+        The exact formulation from Lucas uses:
+        H_A = A * sum_i(1 - sum_p x_i,p)^2    # Each city must be visited exactly once
+        H_B = A * sum_p(1 - sum_i x_i,p)^2    # Each position must have exactly one city
+        H_C = B * sum_i,j,p d_i,j * x_i,p * x_j,(p+1)mod n    # Distance term
+        
+        H = H_A + H_B + H_C
+        """
+        n_cities = self.n_cities
+        
+        # Create a new Hamiltonian or clear the existing one
+        if self.hamiltonian is None:
+            self.hamiltonian = Hamiltonian(n_cities * n_cities)
+        else:
+            self.hamiltonian.clear()
+        
+        # Add metadata
+        self.hamiltonian.metadata = {
+            "problem": "TSP",
+            "n_cities": n_cities,
+            "distances": self.distances.tolist()
+        }
+        
+        # Constraint 1 (H_A): Each city must be visited exactly once
+        # H_A = A * sum_i(1 - sum_p x_i,p)^2
+        for i in range(n_cities):
+            # Add constant term from expanding (1 - sum_p x_i,p)^2
+            self.hamiltonian.add_constant(self.A)
+            
+            # Add linear terms: -2A * sum_p x_i,p
+            for p in range(n_cities):
+                qubit_idx = i * n_cities + p
+                coef, term = create_z_term(qubit_idx, -2 * self.A / 2)  # Divide by 2 for Z operator convention
+                self.hamiltonian.add_term(coef, term)
+            
+            # Add quadratic terms: A * sum_p sum_q x_i,p x_i,q
+            for p in range(n_cities):
+                for q in range(p+1, n_cities):
+                    qubit_idx_p = i * n_cities + p
+                    qubit_idx_q = i * n_cities + q
+                    coef, term = create_zz_term(qubit_idx_p, qubit_idx_q, self.A / 4)  # Divide by 4 for ZZ operator convention
+                    self.hamiltonian.add_term(coef, term)
+        
+        # Constraint 2 (H_B): Each position must have exactly one city
+        # H_B = A * sum_p(1 - sum_i x_i,p)^2
+        for p in range(n_cities):
+            # Add constant term from expanding (1 - sum_i x_i,p)^2
+            self.hamiltonian.add_constant(self.A)
+            
+            # Add linear terms: -2A * sum_i x_i,p
+            for i in range(n_cities):
+                qubit_idx = i * n_cities + p
+                coef, term = create_z_term(qubit_idx, -2 * self.A / 2)  # Divide by 2 for Z operator convention
+                self.hamiltonian.add_term(coef, term)
+            
+            # Add quadratic terms: A * sum_i sum_j x_i,p x_j,p
+            for i in range(n_cities):
+                for j in range(i+1, n_cities):
+                    qubit_idx_i = i * n_cities + p
+                    qubit_idx_j = j * n_cities + p
+                    coef, term = create_zz_term(qubit_idx_i, qubit_idx_j, self.A / 4)  # Divide by 4 for ZZ operator convention
+                    self.hamiltonian.add_term(coef, term)
+        
+        # Objective (H_C): Minimize the total distance
+        # H_C = B * sum_i,j,p d_i,j * x_i,p * x_j,(p+1)mod n
+        for i in range(n_cities):
+            for j in range(n_cities):
+                if i != j:
+                    for p in range(n_cities):
+                        # Consider the route wrapping around
+                        p_next = (p + 1) % n_cities
+                        
+                        qubit_idx_i_p = i * n_cities + p
+                        qubit_idx_j_p_next = j * n_cities + p_next
+                        
+                        coef, term = create_zz_term(qubit_idx_i_p, qubit_idx_j_p_next, self.B * self.distances[i, j] / 4)  # Divide by 4 for ZZ operator convention
+                        self.hamiltonian.add_term(coef, term)
+    
+    def solve_classically(self, **kwargs) -> Dict[str, Any]:
         """
         Solve the TSP problem using classical methods.
         
-        Args:
-            time_of_day: Optional time of day (0-24 hours) affecting traffic
-            
         Returns:
             Dictionary with solution details
         """
-        # Calculate time factor if time_of_day is provided
-        time_factor = 1.0
-        if time_of_day is not None:
-            time_factor = self._calculate_time_factor(time_of_day)
-        
-        # Apply time factor to distances
-        time_adjusted_distances = self.distances * time_factor
-        
         # Solve using brute force
-        solution = solve_tsp_brute_force(time_adjusted_distances)
-        
-        # Store solution
-        self.add_solution("classical", solution)
-        
-        # Add time information if provided
-        if time_of_day is not None:
-            solution["time_of_day"] = time_of_day
-            solution["time_factor"] = time_factor
-        
+        solution = solve_tsp_brute_force(self.distances)
+        self.solutions["classical"] = solution
         return solution
     
-    def solve_with_parameters(self, param_values: Dict[str, Any], solution_name: str = None, **kwargs) -> Dict[str, Any]:
-        """
-        Solve the problem with specific parameter values.
-        
-        Args:
-            param_values: Dictionary of parameter values to apply
-            solution_name: Name to assign to the solution (default: based on param values)
-            **kwargs: Problem-specific parameters
-            
-        Returns:
-            Dictionary with solution details
-        """
-        # Store current parameter values
-        self.parameters = param_values.copy()
-        
-        # Create the parameterized Hamiltonian
-        self.create_parameterized_hamiltonian(param_values, **kwargs)
-        
-        # Calculate time factor if time is provided
-        if 'time' in param_values:
-            time_of_day = param_values['time']
-            time_factor = self._calculate_time_factor(time_of_day)
-            kwargs['time_of_day'] = time_of_day
-        
-        # Solve the problem
-        solution = self.solve_classically(**kwargs)
-        
-        # If time factor wasn't added by solve_classically, add it here
-        if 'time' in param_values and 'time_factor' not in solution:
-            solution['time_factor'] = self._calculate_time_factor(param_values['time'])
-            solution['time_of_day'] = param_values['time']
-        
-        # If solution_name wasn't provided, generate one from parameters
-        if solution_name is None:
-            param_str = "_".join([f"{k}_{v}" for k, v in param_values.items()])
-            solution_name = f"param_{param_str}"
-        
-        # Add parameter values to the solution
-        solution["parameters"] = param_values.copy()
-        
-        # Store the solution
-        self.add_solution(solution_name, solution)
-        
-        return solution
-    
-    def get_solution_from_bitstring(self, bitstring: str) -> Dict[str, Any]:
+    def evaluate_bitstring(self, bitstring: str) -> Dict[str, Any]:
         """
         Get the TSP solution from a bitstring.
         
@@ -178,43 +234,98 @@ class TSPProblem(Problem):
         Returns:
             Dictionary with solution details
         """
-        # Use current time factor if available in parameters
-        time_factor = 1.0
-        if 'time' in self.parameters:
-            time_factor = self._calculate_time_factor(self.parameters['time'])
+        if isinstance(bitstring, str):
+            bits = [int(b) for b in bitstring]
+        else:
+            bits = bitstring
         
-        # Get the solution using the time-adjusted factor
-        solution = get_tsp_solution(
-            bitstring, 
-            self.n_cities, 
-            self.distances,
-            time_factor=time_factor
-        )
+        # Reshape to a matrix where rows are cities and columns are positions
+        # The assignment is a binary matrix x_i,p where x_i,p = 1 if city i is at position p
+        assignment_matrix = np.zeros((self.n_cities, self.n_cities), dtype=int)
+        for i in range(self.n_cities):
+            for p in range(self.n_cities):
+                if i * self.n_cities + p < len(bits):
+                    assignment_matrix[i, p] = bits[i * self.n_cities + p]
         
-        # Add time information if available
-        if 'time' in self.parameters:
-            solution["time_of_day"] = self.parameters['time']
-            solution["time_factor"] = time_factor
+        # Check if the assignment is valid
+        valid = True
+        route = []
         
-        return solution
+        # Each city must be visited exactly once
+        city_counts = assignment_matrix.sum(axis=1)
+        if not np.all(city_counts == 1):
+            valid = False
+        
+        # Each position must have exactly one city
+        position_counts = assignment_matrix.sum(axis=0)
+        if not np.all(position_counts == 1):
+            valid = False
+        
+        # If valid, determine the route order
+        if valid:
+            for p in range(self.n_cities):
+                # Find which city is at position p
+                city_at_p = np.where(assignment_matrix[:, p] == 1)[0]
+                if len(city_at_p) == 1:
+                    route.append(int(city_at_p[0]))
+                else:
+                    valid = False
+                    break
+        
+        # Calculate route distance
+        total_distance = 0.0
+        if valid and len(route) == self.n_cities:
+            for i in range(self.n_cities):
+                from_city = route[i]
+                to_city = route[(i + 1) % self.n_cities]
+                total_distance += self.distances[from_city, to_city]
+        else:
+            # Invalid solution gets a large distance
+            valid = False
+            total_distance = float('inf')
+        
+        return {
+            "bitstring": bitstring,
+            "route": route,
+            "assignment_matrix": assignment_matrix.tolist(),
+            "distance": total_distance,
+            "valid": valid,
+            "city_names": [self.city_names[i] for i in route] if valid else [],
+            "quality": -total_distance if valid else -float('inf')
+        }
     
     def calculate_quality(self, solution: Dict[str, Any]) -> float:
         """
         Calculate the quality of a TSP solution.
         
-        For TSP, quality is the negative of the total distance (since we want to minimize distance).
+        For TSP, the quality is the negative of the route distance, as we want to minimize this.
         
         Args:
             solution: Solution dictionary
             
         Returns:
-            Quality metric (higher is better)
+            Quality metric (higher is better, so negative of the distance)
         """
-        if not solution.get("valid", False):
-            return float('-inf')
+        if solution["valid"]:
+            return -solution["distance"]
+        else:
+            return -float('inf')
+    
+    def reset_parameters(self):
+        """
+        Reset all parameters to their original values.
+        """
+        self.distances = self.original_distances.copy()
         
-        # Return negative distance (higher is better)
-        return -solution.get("total_distance", float('inf'))
+        # Reset metadata
+        self.metadata["distance_range"] = [float(np.min(self.distances)), float(np.max(self.distances))]
+        self.metadata["avg_distance"] = float(np.mean(self.distances))
+        
+        # Reset A coefficient
+        self.A = 2.0 * np.max(self.distances) * self.n_cities
+        
+        # Rebuild the Hamiltonian
+        self.build_hamiltonian()
     
     def visualize_solution(self, solution: Dict[str, Any], filename: Optional[str] = None) -> None:
         """
@@ -224,161 +335,79 @@ class TSPProblem(Problem):
             solution: Solution dictionary
             filename: Optional filename to save the visualization
         """
-        if not solution.get("valid", False):
-            print("Cannot visualize invalid solution")
+        if not solution or not solution["valid"]:
+            print("Invalid solution, cannot visualize.")
             return
         
-        tour = solution["tour"]
+        route = solution["route"]
         
-        # Create a new figure
         plt.figure(figsize=(10, 8))
         
-        # Draw city points
-        plt.scatter(self.city_positions[:, 0], self.city_positions[:, 1], c='blue', s=100, zorder=10)
+        # Draw cities
+        plt.scatter(self.city_positions[:, 0], self.city_positions[:, 1], c='blue', s=100, zorder=2)
         
-        # Label cities
+        # Add city labels
         for i, (x, y) in enumerate(self.city_positions):
-            plt.text(x, y + 0.05, self.city_names[i], ha='center', va='center', fontsize=12)
+            plt.text(x, y + 0.02, self.city_names[i], ha='center', va='bottom', fontsize=10)
         
-        # Draw tour lines
-        for i in range(len(tour)):
-            city1 = tour[i]
-            city2 = tour[(i + 1) % len(tour)]
-            x1, y1 = self.city_positions[city1]
-            x2, y2 = self.city_positions[city2]
-            plt.plot([x1, x2], [y1, y2], 'r-', linewidth=2)
+        # Draw route with arrows
+        for i in range(len(route)):
+            from_idx = route[i]
+            to_idx = route[(i + 1) % len(route)]
             
-            # Add direction arrows
-            dx = x2 - x1
-            dy = y2 - y1
-            arrow_x = x1 + 0.6 * dx
-            arrow_y = y1 + 0.6 * dy
-            plt.arrow(arrow_x, arrow_y, 0.1*dx, 0.1*dy, head_width=0.03, head_length=0.05, fc='black', ec='black')
+            from_pos = self.city_positions[from_idx]
+            to_pos = self.city_positions[to_idx]
+            
+            # Calculate arrow parameters (shorter than full distance to avoid overlap with nodes)
+            dx = to_pos[0] - from_pos[0]
+            dy = to_pos[1] - from_pos[1]
+            
+            # Normalize the direction vector
+            length = np.sqrt(dx**2 + dy**2)
+            if length > 0:
+                udx, udy = dx/length, dy/length
+            else:
+                udx, udy = 0, 0
+                
+            # Shrink the arrow slightly to avoid overlapping with nodes
+            shrink = 0.1
+            start_x = from_pos[0] + shrink * udx
+            start_y = from_pos[1] + shrink * udy
+            end_x = to_pos[0] - shrink * udx
+            end_y = to_pos[1] - shrink * udy
+            
+            # Draw the arrow
+            plt.arrow(start_x, start_y, end_x - start_x, end_y - start_y, 
+                      head_width=0.03, head_length=0.05, fc='red', ec='red', zorder=1,
+                      length_includes_head=True)
+            
+            # Add a small number showing the order
+            mid_x = (from_pos[0] + to_pos[0]) / 2
+            mid_y = (from_pos[1] + to_pos[1]) / 2
+            # Offset the position number slightly to avoid overlap with the line
+            offset_x = -udy * 0.03  # Perpendicular to the line
+            offset_y = udx * 0.03   # Perpendicular to the line
+            plt.text(mid_x + offset_x, mid_y + offset_y, str(i+1), 
+                     ha='center', va='center', bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
         
-        # Add information about the solution
-        distance = solution["total_distance"]
-        title = f"{self.name} Solution - Total Distance: {distance:.2f}"
+        # Draw a legend for the route order
+        plt.plot([], [], 'r-', label=f'Route (Total: {solution["distance"]:.2f})')
         
-        # Add time information if available
-        if "time_of_day" in solution:
-            time_of_day = solution["time_of_day"]
-            time_factor = solution["time_factor"]
-            title += f" (Time: {time_of_day:.1f}h, Factor: {time_factor:.2f})"
+        plt.title(f"TSP Solution - Total Distance: {solution['distance']:.2f}")
+        plt.xlabel("X Coordinate")
+        plt.ylabel("Y Coordinate")
+        plt.legend()
+        plt.grid(True, linestyle='--', alpha=0.7)
         
-        plt.title(title)
-        plt.grid(alpha=0.3)
+        # Adjust plot limits to include all city positions with some padding
+        plt.xlim([min(self.city_positions[:, 0]) - 0.1, max(self.city_positions[:, 0]) + 0.1])
+        plt.ylim([min(self.city_positions[:, 1]) - 0.1, max(self.city_positions[:, 1]) + 0.1])
         
-        # Save the figure if filename is provided
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
-        else:
-            plt.savefig("temp/tsp_solution.png")
-            print("Visualization saved to temp/tsp_solution.png")
         
-        # Close the figure to avoid displaying in non-interactive environments
-        plt.close()
-    
-    def _calculate_time_factor(self, time_of_day: float) -> float:
-        """
-        Calculate the time-dependent distance factor.
-        
-        Args:
-            time_of_day: Time of day (0-24 hours)
-            
-        Returns:
-            Factor to multiply distances by
-        """
-        time = time_of_day % 24  # Ensure time is in 0-24 range
-        
-        # Define how traffic changes throughout the day (sample model)
-        # 1. Rush hours: 7-9 AM, 4-6 PM (increase distances by up to 50%)
-        # 2. Night hours: 11 PM - 5 AM (decrease distances by up to 30%)
-        # 3. Otherwise: normal
-        
-        if 7 <= time < 9:  # Morning rush hour
-            factor = 1.0 + 0.5 * (1.0 - abs(time - 8) / 1.0)  # Peak at 8 AM
-        elif 16 <= time < 18:  # Evening rush hour 
-            factor = 1.0 + 0.5 * (1.0 - abs(time - 17) / 1.0)  # Peak at 5 PM
-        elif time >= 23 or time < 5:  # Night hours
-            if time >= 23:
-                night_time = time - 23
-            else:
-                night_time = time + 1
-            factor = 0.7 + 0.3 * (night_time / 6.0)  # Gradually increase from 11 PM to 5 AM
-        else:
-            # Normal hours: slight variations
-            hour_factor = np.sin(time * np.pi / 12.0) * 0.1
-            factor = 1.0 + hour_factor
-        
-        return factor
-    
-    def visualize_time_effect(self, filename: Optional[str] = None) -> None:
-        """
-        Visualize how time of day affects the optimal route.
-        
-        Args:
-            filename: Optional filename to save the visualization
-        """
-        # Define times to check
-        times = [8.0, 12.0, 17.0, 23.0]  # Rush hour, mid-day, evening rush, night
-        colors = ['red', 'green', 'blue', 'purple']
-        
-        # Create a figure
-        plt.figure(figsize=(12, 10))
-        
-        # Draw city points
-        plt.scatter(self.city_positions[:, 0], self.city_positions[:, 1], c='black', s=100, zorder=10)
-        
-        # Label cities
-        for i, (x, y) in enumerate(self.city_positions):
-            plt.text(x, y + 0.05, self.city_names[i], ha='center', va='center', fontsize=12)
-        
-        # Solve for each time and plot
-        legend_elements = []
-        
-        for time, color in zip(times, colors):
-            # Solve classically for this time
-            solution_name = f"time_{time}"
-            solution = self.get_solution(solution_name)
-            
-            if solution is None:
-                solution = self.solve_with_parameters({'time': time}, solution_name=solution_name)
-            
-            if solution.get("valid", False):
-                tour = solution["tour"]
-                distance = solution["total_distance"]
-                time_factor = solution["time_factor"]
-                
-                # Draw tour lines
-                for i in range(len(tour)):
-                    city1 = tour[i]
-                    city2 = tour[(i + 1) % len(tour)]
-                    x1, y1 = self.city_positions[city1]
-                    x2, y2 = self.city_positions[city2]
-                    plt.plot([x1, x2], [y1, y2], color=color, linewidth=2, alpha=0.7)
-                
-                # Add to legend
-                time_str = f"{int(time)}:00" if time.is_integer() else f"{int(time)}:{int(60*(time-int(time)))}0"
-                legend_elements.append(
-                    mlines.Line2D([], [], color=color, linewidth=2, 
-                                label=f"Time {time_str} - Dist: {distance:.2f} (Factor: {time_factor:.2f})")
-                )
-        
-        plt.title(f"{self.name} - Routes at Different Times of Day")
-        plt.grid(alpha=0.3)
-        plt.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
-        
-        # Save the figure if filename is provided
-        if filename:
-            plt.savefig(filename)
-            print(f"Time effect visualization saved to {filename}")
-        else:
-            plt.savefig("temp/tsp_time_effect.png")
-            print("Visualization saved to temp/tsp_time_effect.png")
-        
-        # Close the figure to avoid displaying in non-interactive environments
-        plt.close()
+        plt.show()
     
     def __str__(self) -> str:
         """
@@ -387,12 +416,21 @@ class TSPProblem(Problem):
         Returns:
             String description of the problem
         """
-        n_cities = self.metadata["n_cities"]
+        cities_str = ", ".join(self.city_names)
         
-        # Calculate some statistics about the distances
-        min_dist = np.min(self.distances[np.nonzero(self.distances)])
-        max_dist = np.max(self.distances)
-        avg_dist = np.sum(self.distances) / (n_cities * (n_cities - 1))
+        # Create a small representation of the distance matrix
+        distances_str = "Distance Matrix:\n"
+        # Show at most 5x5 of the distance matrix
+        n_show = min(5, self.n_cities)
+        for i in range(n_show):
+            row = " ".join([f"{self.distances[i, j]:.1f}" for j in range(n_show)])
+            distances_str += f"  {row}\n"
         
-        return f"{self.name} Problem with {n_cities} cities\n" \
-               f"Distance range: [{min_dist:.2f}, {max_dist:.2f}], Average: {avg_dist:.2f}" 
+        if self.n_cities > n_show:
+            distances_str += "  ... (truncated)\n"
+        
+        return f"{self.name} Problem with {self.n_cities} cities\n" \
+               f"Cities: {cities_str}\n" \
+               f"Average Distance: {self.metadata['avg_distance']:.2f}\n" \
+               f"Distance Range: [{self.metadata['distance_range'][0]:.2f}, {self.metadata['distance_range'][1]:.2f}]\n" \
+               f"{distances_str}" 

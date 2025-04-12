@@ -6,10 +6,13 @@ such that the difference between the sums of the two subsets is minimized.
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Dict, List, Optional, Any
 
-from .base import Problem
-from ..hamiltonians.base import Hamiltonian
+from problems.base import Problem
+from hamiltonian import Hamiltonian
+from utils.pauli_utils import create_z_term, create_zz_term
+from utils.classical_solvers import solve_number_partitioning_brute_force
+from parameter_modifiers.number_partitioning import get_modifiers
 
 class NumberPartitioningProblem(Problem):
     """
@@ -40,34 +43,89 @@ class NumberPartitioningProblem(Problem):
         self.metadata["min_value"] = float(min(numbers))
         self.metadata["max_value"] = float(max(numbers))
         self.metadata["mean_value"] = float(np.mean(numbers))
-    
-    def create_hamiltonian(self) -> Hamiltonian:
-        """
-        Create the Hamiltonian for this Number Partitioning problem.
         
-        The objective is to minimize (sum(x) - sum(1-x))^2, which is equivalent to 
-        minimizing (2*sum(x) - total_sum)^2.
+        # Store original values for parameter resets
+        self.original_numbers = self.numbers.copy()
         
-        Returns:
-            Hamiltonian for the Number Partitioning problem
-        """
-        from ..hamiltonians.number_partitioning import create_number_partitioning_hamiltonian
-        self._hamiltonian = create_number_partitioning_hamiltonian(self.numbers)
-        return self._hamiltonian
+        # Register modifiers
+        default_modifiers = get_modifiers()
+        self.modifier_functions.update(default_modifiers)
+        
+        # Build the initial Hamiltonian
+        self.build_hamiltonian()
     
-    def solve_classically(self) -> Dict[str, Any]:
+    def _apply_modifier(self, modifier_name: str, *args) -> None:
+        """
+        Apply the modifier to the problem parameters.
+        
+        Args:
+            modifier_name: Name of the modifier function to apply
+            *args: Parameters for the modifier function
+        """
+        modifier_func = self.modifier_functions[modifier_name]
+        
+        # Apply modifier to the numbers
+        self.numbers = np.array([modifier_func(num, *args) for num in self.numbers])
+        
+        # Update problem metadata
+        self.total_sum = sum(self.numbers)
+        self.metadata["total_sum"] = self.total_sum
+        self.metadata["min_value"] = float(min(self.numbers))
+        self.metadata["max_value"] = float(max(self.numbers))
+        self.metadata["mean_value"] = float(np.mean(self.numbers))
+    
+    def build_hamiltonian(self) -> None:
+        """
+        Build the Hamiltonian for this Number Partitioning problem following Lucas (2014) formulation.
+        
+        The objective is to minimize (S_a - S_b)^2, which is equivalent to 
+        minimizing (2*S_a - S_total)^2.
+        
+        The exact formulation from Lucas is:
+        H = (sum_i a_i s_i - sum_i a_i (1-s_i))^2
+          = (2*sum_i a_i s_i - sum_i a_i)^2
+          = 4(sum_i a_i s_i)^2 - 4(sum_i a_i)(sum_i a_i s_i) + (sum_i a_i)^2
+        
+        Where s_i ∈ {0,1} binary variables are converted to Ising spins σ_i ∈ {-1,1} with s_i = (1+σ_i)/2
+        """
+        # Create a new Hamiltonian or clear the existing one
+        if self.hamiltonian is None:
+            self.hamiltonian = Hamiltonian(self.n_numbers)
+        else:
+            self.hamiltonian.clear()
+        
+        total_sum = sum(self.numbers)
+        
+        # Constant term: (sum_i a_i)^2
+        self.hamiltonian.add_constant(total_sum**2)
+        
+        for i in range(self.n_numbers):
+            # Linear terms: 4*a_i^2 - 4*total_sum*a_i
+            # For the Z operator convention, the coefficient is divided by 2
+            coeff = 4 * (self.numbers[i]**2) - 4 * total_sum * self.numbers[i]
+            coeff_z, term_z = create_z_term(i, coeff/2)  # Divide by 2 for Z operator convention
+            self.hamiltonian.add_term(coeff_z, term_z)
+            
+        for i in range(self.n_numbers):
+            for j in range(i+1, self.n_numbers):
+                # Quadratic terms: 8*a_i*a_j
+                # For the ZZ operator convention, the coefficient is divided by 4
+                coeff = 8 * self.numbers[i] * self.numbers[j]
+                coeff_zz, term_zz = create_zz_term(i, j, coeff/4)  # Divide by 4 for ZZ operator convention
+                self.hamiltonian.add_term(coeff_zz, term_zz)
+    
+    def solve_classically(self, **kwargs) -> Dict[str, Any]:
         """
         Solve the Number Partitioning problem using classical methods.
         
         Returns:
             Dictionary with solution details
         """
-        from ..utils.classical_solvers import solve_number_partitioning_brute_force
         solution = solve_number_partitioning_brute_force(self.numbers)
-        self.add_solution("classical", solution)
+        self.solutions["classical"] = solution
         return solution
     
-    def get_solution_from_bitstring(self, bitstring: str) -> Dict[str, Any]:
+    def evaluate_bitstring(self, bitstring: str) -> Dict[str, Any]:
         """
         Get the Number Partitioning solution from a bitstring.
         
@@ -77,9 +135,32 @@ class NumberPartitioningProblem(Problem):
         Returns:
             Dictionary with solution details
         """
-        from ..hamiltonians.number_partitioning import get_number_partitioning_solution
-        solution = get_number_partitioning_solution(bitstring, self.numbers)
-        return solution
+        # Extract the binary decisions from the bitstring
+        if len(bitstring) != len(self.numbers):
+            raise ValueError(f"Bitstring length ({len(bitstring)}) does not match number of elements ({len(self.numbers)})")
+        
+        # Create the subsets
+        subset_a = [self.numbers[i] for i, bit in enumerate(bitstring) if bit == "1"]
+        subset_b = [self.numbers[i] for i, bit in enumerate(bitstring) if bit == "0"]
+        
+        # Calculate the sums
+        sum_a = sum(subset_a)
+        sum_b = sum(subset_b)
+        
+        # Calculate the difference (this is what we want to minimize)
+        difference = abs(sum_a - sum_b)
+        
+        # Return the solution
+        return {
+            "subset_a": subset_a,
+            "subset_b": subset_b,
+            "sum_a": sum_a,
+            "sum_b": sum_b,
+            "difference": difference,
+            "bitstring": bitstring,
+            "valid": True,  # All bitstrings are valid solutions for number partitioning
+            "quality": -difference,  # Negative because we want to minimize difference
+        }
     
     def calculate_quality(self, solution: Dict[str, Any]) -> float:
         """
@@ -95,6 +176,22 @@ class NumberPartitioningProblem(Problem):
             Quality metric (higher is better, so negative of the difference)
         """
         return -solution["difference"]
+    
+    def reset_parameters(self):
+        """
+        Reset all parameters to their original values.
+        """
+        self.numbers = self.original_numbers.copy()
+        self.total_sum = sum(self.numbers)
+        
+        # Update metadata
+        self.metadata["total_sum"] = self.total_sum
+        self.metadata["min_value"] = float(min(self.numbers))
+        self.metadata["max_value"] = float(max(self.numbers))
+        self.metadata["mean_value"] = float(np.mean(self.numbers))
+        
+        # Rebuild the Hamiltonian
+        self.build_hamiltonian()
     
     def visualize_solution(self, solution: Dict[str, Any], filename: Optional[str] = None) -> None:
         """
@@ -148,8 +245,8 @@ class NumberPartitioningProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
-            
-        plt.close()
+        
+        plt.show()
     
     def __str__(self) -> str:
         """

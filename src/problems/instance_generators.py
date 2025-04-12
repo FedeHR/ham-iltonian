@@ -4,11 +4,10 @@ Utility functions for creating problem instances.
 This module provides helper functions for creating different problem instances
 for various optimization problems.
 """
-import networkx as nx
 import numpy as np
-from typing import List, Tuple, Dict, Any, Optional, Union
+from typing import List, Tuple, Optional
 
-from ..utils.graph_utils import (
+from utils.graph_utils import (
     create_random_weighted_graph, 
     create_complete_weighted_graph,
     create_grid_graph,

@@ -2,15 +2,15 @@
 The MaxCut problem seeks to partition vertices of a graph into two sets 
 such that the sum of weights of edges between the two sets is maximized.
 """
-# TODO: Question for Tobias: should the modifier be at problem level or Hamiltonian level?
-#  more intuitive at problem level, but technically the Hamiltonian should be parametrized
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import Dict, Optional, Any, List, Union
 
 from problems.base import Problem
-from hamiltonians.maxcut import MaxCutHamiltonian
-from utils.classical_solvers import solve_maxcut_brute_force
+from hamiltonian import Hamiltonian
+from utils.pauli_utils import create_zz_term
+from utils.classical_solvers import solve_maxcut_brute_force, evaluate_mc_solution
+from parameter_modifiers.maxcut import get_modifiers
 
 class MaxCutProblem(Problem):
     """
@@ -26,72 +26,51 @@ class MaxCutProblem(Problem):
         """
         super().__init__(name)
         self.graph = graph
+        self.original_graph = graph.copy()
         self.node_positions = nx.spring_layout(self.graph, seed=42)  # Store persistent positions
-        
-        # Store the original edge weights for easy access
-        self.original_weights = {}
-        for u, v, data in graph.edges(data=True):
-            self.original_weights[(u, v)] = data.get("weight", 1.0)
-            self.original_weights[(v, u)] = data.get("weight", 1.0)
+
+        default_maxcut_modifiers = get_modifiers()
+        self.modifier_functions.update(default_maxcut_modifiers)
     
-    def create_hamiltonian(self) -> Any:
+    def _apply_modifier(self, modifier_name: str, *args) -> None:
         """
-        Create the Hamiltonian for this MaxCut problem.
-        
-        Returns:
-            Hamiltonian for the MaxCut problem
-        """
-        self.hamiltonian = MaxCutHamiltonian(self.graph)
-        return self.hamiltonian
-    
-    def modify_hamiltonian(self, modifier_name: str, *args) -> None:
-        """
-        Modify the graph weights directly based on the modifier and then update the Hamiltonian.
+        Apply the modifier to the graph weights.
         
         Args:
             modifier_name: Name of the modifier function to apply
             *args: Parameters for the modifier function
         """
-        if not self.hamiltonian:
-            raise ValueError("Hamiltonian has not been created yet. Call create_hamiltonian() first.")
-            
-        # Get the modifier function from the Hamiltonian
-        if modifier_name not in self.hamiltonian.modifier_functions:
-            raise ValueError(f"Unknown modifier '{modifier_name}'. "
-                             f"Available modifiers: {list(self.hamiltonian.modifier_functions.keys())}")
-        
-        modifier_func = self.hamiltonian.modifier_functions[modifier_name]
-        
-        # Apply the modifier directly to the graph weights
-        modified_graph = self.graph.copy()
+        modifier_func = self.modifier_functions[modifier_name]
+
         for u, v, data in self.graph.edges(data=True):
-            original_weight = data.get("weight", 1.0)
-            # Apply the modifier to the weight directly
-            modified_weight = modifier_func(original_weight, args)
-            modified_graph[u][v]["weight"] = modified_weight
-        
-        # Update the graph with modified weights
-        self.graph = modified_graph
-        
-        # Recreate the Hamiltonian based on the modified graph
-        self.hamiltonian = MaxCutHamiltonian(self.graph)
-    
-    def update_graph_from_hamiltonian(self) -> None:
+            original_weight = data.get("weight")
+            modified_weight = modifier_func(original_weight, *args)
+            self.graph[u][v]["weight"] = modified_weight
+
+    def build_hamiltonian(self) -> None:
         """
-        Update the graph weights based on the current Hamiltonian coefficients.
-        This is called automatically when the Hamiltonian is modified.
+        Build the MaxCut Hamiltonian from the current graph.
         """
+        # Create a new Hamiltonian or clear the existing one
+        if self.hamiltonian is None:
+            self.hamiltonian = Hamiltonian(self.graph.number_of_nodes())
+        else:
+            self.hamiltonian.clear()
+        
+        constant_term = 0.0
+        
+        # Build the Hamiltonian terms
+        for i, j, attr in self.graph.edges(data=True):
+            weight = attr.get('weight', 1.0)
             
-        # Update edge weights based on Hamiltonian coefficients
-        for coeff, term in self.hamiltonian.terms:
-            # Extract edge indices from the term (e.g., "Z0@Z1" refers to edge (0,1))
-            parts = term.split('@')
-            u = int(parts[0][1:])  # Remove the 'Z' prefix
-            v = int(parts[1][1:])
+            # Add constant term: w_ij / 2
+            constant_term += weight / 2
             
-            # The Hamiltonian term coefficient is -w_ij/2, so we multiply by -2 to get weight
-            weight = -2 * coeff
-            self.graph[u][v]['weight'] = weight
+            # Add interaction term: -w_ij * Z_i Z_j / 2
+            coefficient, term = create_zz_term(i, j, -weight / 2)
+            self.hamiltonian.add_term(coefficient, term)
+        
+        self.hamiltonian.add_constant(constant_term)
     
     def solve_classically(self) -> Dict[str, Any]:
         """
@@ -101,10 +80,10 @@ class MaxCutProblem(Problem):
             Dictionary with solution details
         """
         solution = solve_maxcut_brute_force(self.graph)
-        self.add_solution("brute_force", solution)
+        self.solutions["brute_force"] = solution
         return solution
     
-    def get_solution_from_bitstring(self, bitstring: Union[str, List[int]]) -> Dict[str, Any]:
+    def evaluate_bitstring(self, bitstring: Union[str, List[int]]) -> Dict[str, Any]:
         """
         Get the MaxCut solution from a bitstring.
         
@@ -119,19 +98,7 @@ class MaxCutProblem(Problem):
         else:
             assignment = bitstring
         
-        # Convert to dictionary for compatibility with test expectations
-        assignment_dict = {i: bit for i, bit in enumerate(assignment)}
-        
-        # Partition the nodes
-        set_0 = [i for i, bit in enumerate(assignment) if bit == 0]
-        set_1 = [i for i, bit in enumerate(assignment) if bit == 1]
-        
-        # Calculate the cut value
-        cut_value = 0.0
-        for i, j, attr in self.graph.edges(data=True):
-            weight = attr.get('weight', 1.0)
-            if (i in set_0 and j in set_1) or (i in set_1 and j in set_0):
-                cut_value += weight
+        assignment_dict, cut_value, set_0, set_1 = evaluate_mc_solution(assignment, self.graph)
         
         return {
             "bitstring": bitstring,
@@ -143,7 +110,14 @@ class MaxCutProblem(Problem):
     def calculate_quality(self, solution: Dict[str, Any]) -> float:
         return solution["cut_value"]
     
-    # TODO: interesting, NxGraph provides the option to convert graph to LaTeX!
+    def reset_parameters(self):
+        """
+        Reset the graph, resetting all parameters to their original values.
+        """
+        # Reset the graph weights to original values
+        self.graph = self.original_graph.copy()
+        self.build_hamiltonian()
+    
     def visualize_graph(self, filename: Optional[str] = None) -> None:
         """
         Visualize the graph.
@@ -158,7 +132,6 @@ class MaxCutProblem(Problem):
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
-
         plt.show()
     
     def visualize_solution(self, solution: Dict[str, Any], filename: Optional[str] = None) -> None:

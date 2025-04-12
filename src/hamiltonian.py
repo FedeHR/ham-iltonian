@@ -1,7 +1,5 @@
-from typing import List, Optional, Callable, Union
 import pennylane as qml
 from utils.pauli_utils import pauli_terms_to_pennylane
-import numpy as np
 
 class Hamiltonian:
     """
@@ -12,16 +10,6 @@ class Hamiltonian:
         self.num_qubits = num_qubits
         self.terms = []  # List of (coefficient, pauli_term) tuples
         self.constant = 0.0  # Constant energy offset to ensure the Hamiltonian matches the objective function value
-        self.metadata = {}
-
-        # Dictionary of parameter names to functions that modify coefficients
-        self.modifier_functions = {
-            # Default modifier functions
-            "linear": lambda coefficient, params: coefficient + params[0],
-            "quadratic": lambda coefficient, params: coefficient * (params[0] ** 2),
-            "exponential": lambda coefficient, params: coefficient * np.exp(params[0]),
-            "chaotic": lambda coefficient: coefficient * np.random.uniform(0, 1),
-        }
         
     def _update_num_qubits(self, pauli_term: str) -> None:
         """
@@ -45,50 +33,7 @@ class Hamiltonian:
         """
         self.terms.append((coefficient, pauli_term))
         self._update_num_qubits(pauli_term)
-
-    def add_modifier_function(self, function_name: str,
-                              function: Callable[[float, Optional[Union[float, List[float]]]], float]) -> None:
-        """
-        Add a custom modifier function to modify the coefficients of the Hamiltonian.
-        Args:
-            function_name: Name of the modifier
-            function: Function that takes a coefficient and optionally a parameter or a list of parameters and returns a modified coefficient
-        """
-        self.modifier_functions[function_name] = function
-
-
-    def modify_coefficients(self, modifier_name: str, *args, new_hamiltonian=True) -> Optional['Hamiltonian']:
-        """
-        Modify the coefficients of the Hamiltonian based on a specified modifier function and parameters.
-
-        Args:
-            modifier_name: Name of the registered modifier function to apply
-            args: Parameters for the modifier function
-            new_hamiltonian: If True, return a new Hamiltonian with modified coefficients;
-                if False, modify the current Hamiltonian in place
-
-        Returns:
-            A new Hamiltonian with modified coefficients if new_hamiltonian is True, None otherwise
-
-        Raises:
-            ValueError: If the modifier_name is not registered
-        """
-        if modifier_name not in self.modifier_functions:
-            raise ValueError(f"Unknown modifier '{modifier_name}'. "
-                             f"Available modifiers: {list(self.modifier_functions.keys())}")
-
-        modifier_func = self.modifier_functions[modifier_name]
-        modified_terms = [(modifier_func(coefficient, args), pauli_term) for coefficient, pauli_term in self.terms]
-
-        if new_hamiltonian:
-            new_hamiltonian = Hamiltonian(self.num_qubits)
-            new_hamiltonian.terms = modified_terms
-            new_hamiltonian.constant = self.constant
-            new_hamiltonian.metadata = self.metadata.copy()
-            return new_hamiltonian
-        else:
-            self.terms = modified_terms
-        
+    
     def to_pennylane(self) -> qml.Hamiltonian:
         """
         Convert this Hamiltonian to a PennyLane Hamiltonian.
@@ -113,6 +58,14 @@ class Hamiltonian:
             value: Constant value to add
         """
         self.constant += value
+    
+    def clear(self) -> None:
+        """
+        Clear all terms and reset the constant.
+        Useful when rebuilding a Hamiltonian after parameter modifications.
+        """
+        self.terms = []
+        self.constant = 0.0
     
     def __str__(self) -> str:
         """
@@ -177,13 +130,6 @@ class Hamiltonian:
         # Add the constants
         result.constant = self.constant + other.constant
         
-        # Copy all modifier functions
-        result.modifier_functions = self.modifier_functions.copy()
-        result.modifier_functions.update(other.modifier_functions)
-        
-        # Copy metadata
-        result.metadata = {**self.metadata, **other.metadata}
-        
         return result
     
     def __mul__(self, scalar: float) -> 'Hamiltonian':
@@ -205,12 +151,6 @@ class Hamiltonian:
         
         # Scale the constant
         result.constant = self.constant * scalar
-        
-        # Copy modifier functions
-        result.modifier_functions = self.modifier_functions.copy()
-        
-        # Copy metadata
-        result.metadata = self.metadata.copy()
         
         return result
     

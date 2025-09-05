@@ -8,6 +8,7 @@ src/hamiltonians/problems/__pycache__/
 src/hamiltonians/utils/__pycache__/
 src/hamiltonians/hamiltonian/__pycache__/
 src/hamiltonians/parameter_modifiers/__pycache__/
+src/hamiltonians/solution_analysis/__pycache__/
 tests/__pycache__/
 
 .venv/

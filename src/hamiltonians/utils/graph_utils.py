@@ -6,9 +6,17 @@ import networkx as nx
 import numpy as np
 from typing import List, Tuple, Optional
 
+# TODO global seed --> still has to be compatible with multiple problem generation
+# TODO add function to generate n graphs / n maxcut functions
+# Idea! Make a function generate_n_maxcut which uses the logic of the for_loop increasing the seed!
+# for idx, i in range(n_instances)
+#    g = create...(seed=idx)
+# EASY!
+
 def create_random_weighted_graph(n_nodes: int,
                                  edge_probability: float = 0.5,
                                  init_weight_range: Tuple[float, float] = (0.1, 1),
+                                 n_edge_params: int = 1,
                                  edge_param_range: Tuple[float, float] = (0.1, 1),
                                  seed: Optional[int] = None) -> nx.Graph:
     """
@@ -18,6 +26,7 @@ def create_random_weighted_graph(n_nodes: int,
         n_nodes: Number of nodes in the graph
         edge_probability: Probability of edge creation between any two nodes
         init_weight_range: Range of initial edge weights (min, max)
+        n_edge_params: Number of additional parameters per edge
         edge_param_range: Range of additional per edge parameter weights (min, max)
         seed: Random seed for reproducibility
         
@@ -32,12 +41,17 @@ def create_random_weighted_graph(n_nodes: int,
     # Add random initial weights and additional parameter to edges
     for u, v in G.edges():
         G[u][v]['weight'] = np.random.uniform(init_weight_range[0], init_weight_range[1])
-        G[v][u]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        if n_edge_params == 1:
+            G[u][v]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        else:
+            for i in range(n_edge_params):
+                G[u][v][f'edge_param_{i+1}'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
         
     return G
 
 def create_complete_weighted_graph(n_nodes: int,
                                    init_weight_range: Tuple[float, float] = (0.1, 1.0),
+                                   n_edge_params: int = 1,
                                    edge_param_range: Tuple[float, float] = (0.1, 1),
                                    seed: Optional[int] = None) -> nx.Graph:
     """
@@ -46,6 +60,7 @@ def create_complete_weighted_graph(n_nodes: int,
     Args:
         n_nodes: Number of nodes in the graph
         init_weight_range: Range of initial edge weights (min, max)
+        n_edge_params: Number of additional parameters per edge
         edge_param_range: Range of additional per edge parameter weights (min, max)
         seed: Random seed for reproducibility
         
@@ -60,13 +75,18 @@ def create_complete_weighted_graph(n_nodes: int,
     # Add random initial weights and additional parameter to edges
     for u, v in G.edges():
         G[u][v]['weight'] = np.random.uniform(init_weight_range[0], init_weight_range[1])
-        G[v][u]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        if n_edge_params == 1:
+            G[u][v]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        else:
+            for i in range(n_edge_params):
+                G[u][v][f'edge_param_{i+1}'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
         
     return G
 
 def create_grid_graph(rows: int,
                       cols: int,
                       init_weight_range: Tuple[float, float] = (0.1, 1.0),
+                      n_edge_params: int = 1,
                       edge_param_range: Tuple[float, float] = (0.1, 1),
                       seed: Optional[int] = None) -> nx.Graph:
     """
@@ -76,6 +96,7 @@ def create_grid_graph(rows: int,
         rows: Number of rows in the grid
         cols: Number of columns in the grid
         init_weight_range: Range of edge weights (min, max)
+        n_edge_params: Number of additional parameters per edge
         edge_param_range: Range of additional per edge parameter weights (min, max)
         seed: Random seed for reproducibility
         
@@ -93,7 +114,11 @@ def create_grid_graph(rows: int,
     # Add random initial weights and additional parameter to edges
     for u, v in G.edges():
         G[u][v]['weight'] = np.random.uniform(init_weight_range[0], init_weight_range[1])
-        G[v][u]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        if n_edge_params == 1:
+            G[u][v]['edge_param'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
+        else:
+            for i in range(n_edge_params):
+                G[u][v][f'edge_param_{i+1}'] = np.random.uniform(edge_param_range[0], edge_param_range[1])
         
     return G
 

@@ -93,12 +93,10 @@ class Hamiltonian:
         
         # Add the constant term if non-zero
         if self.constant != 0:
-            if terms_strs and self.constant > 0:
-                terms_strs.append(f"+ {self.constant}")
+            if terms_strs and self.constant >= 0:
+                terms_strs.append(f"+ {self.constant:.3f}")
             elif self.constant < 0:
-                terms_strs.append(f"- {abs(self.constant)}")
-            else:
-                terms_strs.append(f"{self.constant}")
+                terms_strs.append(f"- {abs(self.constant):.3f}")
         
         # Join all terms
         if not terms_strs:

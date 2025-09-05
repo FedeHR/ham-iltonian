@@ -3,48 +3,55 @@ from typing import Callable, Dict
 import networkx as nx
 import numpy as np
 
-def linear_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+def linear_edge_scaling(weight: float, scaling_factor: float, edge_param: float) -> float:
     """
-    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+    Apply a linear formula to scale the edge weights:
+    weight = weight + edge_param * scaling_factor
     
     Args:
         weight: Original edge weight
-        scaling_factor: Factor to scale the weight by
-        edge_param: Specific parameter of the edge to consider in the scaling
-        
+        scaling_factor: Factor for all polynomial terms
+        edge_param: Edge parameter for the linear term
+
     Returns:
         Modified weight
     """
     return weight + scaling_factor * edge_param
 
 
-def quadratic_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+def quadratic_edge_scaling(weight: float, scaling_factor: float, edge_param_1: float, edge_param_2: float) -> float:
     """
-    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+    Apply a quadratic formula to scale the edge weights:
+    weight = weight + edge_param1 * scaling_factor + edge_param2 * scaling_factor ** 2
 
     Args:
         weight: Original edge weight
-        scaling_factor: Factor to scale the weight by
-        edge_param: Specific parameter of the edge to consider in the scaling
+        scaling_factor: Factor for all polynomial terms
+        edge_param_1: Edge parameter for the linear term
+        edge_param_2: Edge parameter for the quadratic term
 
     Returns:
         Modified weight
     """
-    return weight + (scaling_factor * edge_param) ** 2
+    return weight + edge_param_1 * scaling_factor + edge_param_2 * scaling_factor ** 2
 
-def qubic_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+def qubic_edge_scaling(weight: float, scaling_factor: float, edge_param_1: float, edge_param_2: float,
+                       edge_param_3: float) -> float:
     """
-    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+    Apply a qubic formula to scale the edge weights:
+    weight = weight + edge_param1 * scaling_factor + edge_param2 * scaling_factor ** 2 + edge_param3 * scaling_factor ** 3
 
     Args:
         weight: Original edge weight
-        scaling_factor: Factor to scale the weight by
-        edge_param: Specific parameter of the edge to consider in the scaling
+        scaling_factor: Factor for all polynomial terms
+        edge_param_1: Edge parameter for the linear term
+        edge_param_2: Edge parameter for the quadratic term
+        edge_param_3: Edge parameter for the qubic term
 
     Returns:
         Modified weight
     """
-    return weight + (scaling_factor * edge_param) ** 3
+    return weight + edge_param_1 * scaling_factor + edge_param_2 * scaling_factor ** 2 + edge_param_3 * scaling_factor ** 3
 
 def edge_density_modifier(weight: float, scaling_factor: float, graph:nx.Graph) -> float:
     """

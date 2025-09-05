@@ -44,25 +44,30 @@ class MaxCutProblem(Problem):
         modifier_func = self.modifier_functions[modifier_name]
         modifier_sig = inspect.signature(modifier_func)
         
+        # Identify automatically handled parameters
+        auto_params = {'weight', 'graph'}
+        for param in modifier_sig.parameters:
+            if param.startswith('edge_param'):
+                auto_params.add(param)
+
         # Prevent users from passing automatically handled arguments
-        forbidden_params = {'weight', 'graph', 'edge_param'}
-        provided_forbidden = forbidden_params.intersection(kwargs.keys())
-        if provided_forbidden:
+        provided_auto_params = auto_params.intersection(kwargs.keys())
+        if provided_auto_params:
             raise TypeError(
                 f"The following arguments for '{modifier_name}' are automatically provided "
-                f"and should not be passed: {list(provided_forbidden)}"
+                f"and should not be passed: {list(provided_auto_params)}"
             )
 
         # Check for missing required arguments
         required_params = [
             p.name for p in modifier_sig.parameters.values() 
-            if p.default == inspect.Parameter.empty and p.name not in ['weight', 'graph', 'edge_param']
+            if p.default == inspect.Parameter.empty and p.name not in auto_params
         ]
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
             raise TypeError(
                 f"Missing required arguments for '{modifier_name}': {missing_params}. "
-                f"Note: 'weight', 'graph', and 'edge_param' are provided automatically if needed by the modifier."
+                f"Note: 'weight', 'graph', and 'edge_param*' arguments are provided automatically if needed by the modifier."
             )
 
         for u, v, data in self.graph.edges(data=True):
@@ -71,10 +76,12 @@ class MaxCutProblem(Problem):
             call_kwargs = kwargs.copy()
             if 'graph' in modifier_sig.parameters:
                 call_kwargs['graph'] = self.graph
-            if 'edge_param' in modifier_sig.parameters:
-                if "edge_param" not in data:
-                    raise ValueError(f"Edge ({u}, {v}) is missing the required 'edge_param' attribute for the '{modifier_name}' modifier.")
-                call_kwargs['edge_param'] = data.get("edge_param")
+            
+            for param_name in modifier_sig.parameters:
+                if param_name.startswith("edge_param"):
+                    if param_name not in data:
+                        raise ValueError(f"Edge ({u}, {v}) is missing the required '{param_name}' attribute for the '{modifier_name}' modifier.")
+                    call_kwargs[param_name] = data.get(param_name)
             
             modified_weight = modifier_func(original_weight, **call_kwargs)
             self.graph[u][v]["weight"] = modified_weight
@@ -150,7 +157,7 @@ class MaxCutProblem(Problem):
         self.graph = self.original_graph.copy()
         self.build_hamiltonian()
     
-    def visualize_graph(self, filename: Optional[str] = None, show = True) -> None:
+    def visualize_graph(self, filename: Optional[str] = None) -> None:
         """
         Visualize the graph.
         """

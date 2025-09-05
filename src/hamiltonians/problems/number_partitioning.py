@@ -3,16 +3,18 @@ Number Partitioning Problem implementation.
 
 The Number Partitioning Problem seeks to divide a set of numbers into two subsets
 such that the difference between the sums of the two subsets is minimized.
+
+***** TODO IN CONSTRUCTION / BETA
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Any
 
-from problems.base import Problem
-from hamiltonian import Hamiltonian
-from utils.pauli_utils import create_z_term, create_zz_term
-from utils.classical_solvers import solve_number_partitioning_brute_force
-from parameter_modifiers.number_partitioning import get_modifiers
+from hamiltonians.problems.base import Problem
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+from hamiltonians.utils.pauli_utils import create_z_term, create_zz_term
+from hamiltonians.utils.classical_solvers import solve_number_partitioning_brute_force
+from hamiltonians.parameter_modifiers.number_partitioning import get_modifiers
 
 class NumberPartitioningProblem(Problem):
     """
@@ -22,17 +24,17 @@ class NumberPartitioningProblem(Problem):
     such that the difference between the sums of the subsets is minimized.
     """
     
-    def __init__(self, 
-                 numbers: List[float], 
-                 name: str = "Number Partitioning"):
+    def __init__(self,
+                 numbers: List[float],
+                 problem_type: str = "Number Partitioning"):
         """
         Initialize a Number Partitioning problem.
         
         Args:
             numbers: List of numbers to partition
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
         """
-        super().__init__(name)
+        super().__init__(problem_type)
         self.numbers = np.array(numbers)
         self.n_numbers = len(numbers)
         self.total_sum = sum(numbers)

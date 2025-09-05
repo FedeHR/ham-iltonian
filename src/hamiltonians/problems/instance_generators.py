@@ -7,7 +7,7 @@ for various optimization problems.
 import numpy as np
 from typing import List, Tuple, Optional
 
-from utils.graph_utils import (
+from hamiltonians.utils.graph_utils import (
     create_random_weighted_graph, 
     create_complete_weighted_graph,
     create_grid_graph,
@@ -17,7 +17,8 @@ from utils.graph_utils import (
 def create_maxcut_instance(
     n_nodes: int = 5,
     edge_probability: float = 0.7,
-    weight_range: Tuple[float, float] = (0.5, 2.0),
+    init_weight_range: Tuple[float, float] = (0.5, 2.0),
+    edge_param_range: Tuple[float, float] = (-1.0, 1.0),
     graph_type: str = "random", 
     grid_dims: Optional[Tuple[int, int]] = None,
     name: str = "MaxCut Instance",
@@ -29,7 +30,7 @@ def create_maxcut_instance(
     Args:
         n_nodes: Number of nodes in the graph
         edge_probability: Probability of edge creation between any two nodes (for random graphs)
-        weight_range: Range of edge weights (min, max)
+        init_weight_range: Range of initial edge weights (min, max)
         graph_type: Type of graph ("random", "complete", "grid")
         grid_dims: Dimensions (rows, cols) for grid graph (ignores n_nodes)
         name: Name of the problem instance
@@ -45,13 +46,15 @@ def create_maxcut_instance(
         graph = create_random_weighted_graph(
             n_nodes=n_nodes, 
             edge_probability=edge_probability,
-            weight_range=weight_range,
+            init_weight_range=init_weight_range,
+            edge_param_range=edge_param_range,
             seed=seed
         )
     elif graph_type == "complete":
         graph = create_complete_weighted_graph(
             n_nodes=n_nodes,
-            weight_range=weight_range,
+            init_weight_range=init_weight_range,
+            edge_param_range=edge_param_range,
             seed=seed
         )
     elif graph_type == "grid":
@@ -59,13 +62,14 @@ def create_maxcut_instance(
         graph = create_grid_graph(
             rows=rows,
             cols=cols,
-            weight_range=weight_range,
+            init_weight_range=init_weight_range,
+            edge_param_range=edge_param_range,
             seed=seed
         )
     else:
         raise ValueError(f"Unknown graph type: {graph_type}")
         
-    return MaxCutProblem(graph, name=name)
+    return MaxCutProblem(graph, problem_type=name)
 
 def create_tsp_instance(
     n_cities: int = 5,
@@ -126,7 +130,7 @@ def create_tsp_instance(
     # Create optional city names
     city_names = [f"City {i}" for i in range(n_cities)]
     
-    return TSPProblem(distances=distances, city_names=city_names, city_positions=city_positions, name=name)
+    return TSPProblem(distances=distances, city_names=city_names, city_positions=city_positions, problem_type=name)
 
 def create_knapsack_instance(
     n_items: int = 10,
@@ -161,7 +165,7 @@ def create_knapsack_instance(
     weights = np.random.uniform(weight_range[0], weight_range[1], n_items)
     
     # Note: KnapsackProblem uses 'capacity' instead of 'max_weight'
-    return KnapsackProblem(values=values, weights=weights, capacity=max_weight, name=name)
+    return KnapsackProblem(values=values, weights=weights, capacity=max_weight, problem_type=name)
 
 def create_portfolio_instance(
     n_assets: int = 5,
@@ -213,7 +217,7 @@ def create_portfolio_instance(
         vols = np.random.uniform(0.05, 0.3, n_assets)
         risk_matrix = corr * np.outer(vols, vols) * risk_factor
     
-    return PortfolioProblem(returns=returns, risk_matrix=risk_matrix, budget=budget, risk_factor=risk_factor, name=name)
+    return PortfolioProblem(returns=returns, risk_matrix=risk_matrix, budget=budget, risk_factor=risk_factor, problem_type=name)
 
 def create_number_partitioning_instance(
     numbers: Optional[List[float]] = None,
@@ -245,4 +249,4 @@ def create_number_partitioning_instance(
         # Generate random numbers
         numbers = np.random.uniform(number_range[0], number_range[1], n_numbers)
     
-    return NumberPartitioningProblem(numbers=numbers, name=name)
+    return NumberPartitioningProblem(numbers=numbers, problem_type=name)

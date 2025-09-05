@@ -3,6 +3,48 @@ Parameter modifier functions for the Knapsack problem.
 """
 from typing import Callable, Dict
 
+def linear_value_scaling(value: float, scaling_factor: float, sensitivity: float) -> float:
+    """
+    Linearly scale the item value by a factor, considering its sensitivity.
+    
+    Args:
+        value: Original item value
+        scaling_factor: Factor to scale the value by
+        sensitivity: Sensitivity of the item
+        
+    Returns:
+        Modified value
+    """
+    return value + scaling_factor * sensitivity
+
+def quadratic_value_scaling(value: float, scaling_factor: float, sensitivity: float) -> float:
+    """
+    Quadratically scale the item value by a factor, considering its sensitivity.
+    
+    Args:
+        value: Original item value
+        scaling_factor: Factor to scale the value by
+        sensitivity: Sensitivity of the item
+        
+    Returns:
+        Modified value
+    """
+    return value + (scaling_factor * sensitivity) ** 2
+
+def qubic_value_scaling(value: float, scaling_factor: float, sensitivity: float) -> float:
+    """
+    Cubically scale the item value by a factor, considering its sensitivity.
+    
+    Args:
+        value: Original item value
+        scaling_factor: Factor to scale the value by
+        sensitivity: Sensitivity of the item
+        
+    Returns:
+        Modified value
+    """
+    return value + (scaling_factor * sensitivity) ** 3
+
 def value_scaling_modifier(value: float, scaling_factor: float) -> float:
     """
     Scale item values by a factor.
@@ -81,6 +123,7 @@ def linear_weight_modifier(weight: float, offset: float) -> float:
     """
     return weight + offset
 
+
 def get_modifiers() -> Dict[str, Callable]:
     """
     Get a dictionary of all Knapsack modifier functions.
@@ -95,4 +138,7 @@ def get_modifiers() -> Dict[str, Callable]:
         "adjust_penalty": penalty_modifier,
         "linear_value": linear_value_modifier,
         "linear_weight": linear_weight_modifier,
+        "linear_value_scaling": linear_value_scaling,
+        "quadratic_value_scaling": quadratic_value_scaling,
+        "qubic_value_scaling": qubic_value_scaling,
     } 

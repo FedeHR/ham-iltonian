@@ -9,6 +9,7 @@ Key features:
 - 🎨 Built-in visualization tools for solutions
 - ⚡ Parametrized Hamiltonian support for dynamic problems (dynamic time, risk factors, or any other desired parameter)
 - 🧩 Easy problem instance generation with utility functions
+- 📊 Parameter effect visualization tools to analyze how modifications influence solutions
 
 Useful for researchers and developers working at the intersection of quantum computing and combinatorial optimization problems.
 
@@ -20,9 +21,72 @@ pip install -r requirements.txt
 
 ## Usage
 
+### MaxCut Example
+
 ```python
-# Create a MaxCut problem instance using utility functions
-from src.problems.instance_generators import create_maxcut_instance
+# Create a MaxCut problem instance
+from hamiltonians import create_maxcut_instance
+
+maxcut = create_maxcut_instance(
+    n_nodes=5,
+    edge_probability=0.7,
+    weight_range=(0.5, 2.0),
+    graph_type="random",
+    seed=42
+)
+
+# Build and print the Hamiltonian
+maxcut.build_hamiltonian()
+print("Original Hamiltonian:")
+maxcut.print_hamiltonian(truncate=True)
+
+# Modify parameters. The Hamiltonian is automatically rebuilt after modification.
+# THe modify_parameter functions takes a modifier function (e.g. linear scaling) and a global parameter for the modifier function
+maxcut.modify_parameters("linear", 0.5)
+print("\nModified Hamiltonian (with linear modifier):")
+maxcut.print_hamiltonian(truncate=True)
+
+# Solve classically for comparison
+solution = maxcut.solve_classically()
+print(f"\nSolution: {solution}")
+
+# Visualize the solution
+maxcut.visualize_solution(solution)
+```
+
+### Knapsack Example
+
+```python
+# Create a Knapsack problem instance
+from hamiltonians import create_knapsack_instance
+
+knapsack = create_knapsack_instance(n_items=5, max_weight=50.0, seed=42)
+
+# The Hamiltonian is built upon instantiation for Knapsack
+print("Original Hamiltonian:")
+knapsack.print_hamiltonian(truncate=True, max_length=200)
+
+# Modify item values. The Hamiltonian is automatically rebuilt.
+# Scale all item values by a factor of 1.5
+knapsack.modify_parameters("scale_values", 1.5)
+print("\nModified Hamiltonian (with scaled values):")
+knapsack.print_hamiltonian(truncate=True, max_length=200)
+
+# Solve classically for comparison
+solution = knapsack.solve_classically()
+print(f"\nSolution: {solution}")
+
+# Visualize the solution
+knapsack.visualize_solution(solution)
+```
+
+### Visualizing Parameter Effects
+
+The library includes tools to visualize how different parameter values affect problem structure and solutions:
+
+```python
+from hamiltonians import parameter_sensitivity_plot, solution_evolution
+from hamiltonians import create_maxcut_instance
 
 # Create a problem with 5 nodes
 maxcut = create_maxcut_instance(
@@ -33,37 +97,29 @@ maxcut = create_maxcut_instance(
     seed=42
 )
 
-# Create the corresponding Hamiltonian
-maxcut.build_hamiltonian()
-hamiltonian = maxcut.hamiltonian
-print(hamiltonian)
+# See how solution quality changes across parameter values
+parameter_sensitivity_plot(
+    maxcut,
+    "linear",
+    param_range=[0.0, 0.2, 0.4, 0.6, 0.8],
+    title="Cut Value vs Linear Modifier"
+)
 
-# Solve classically for comparison
-solution = maxcut.solve_classically()
-print(solution)
-
-# Visualize the solution
-problem.visualize_solution(solution)
+# Visualize how solutions evolve with different parameter values
+solution_evolution(
+    maxcut,
+    "edge_density_scaling",
+    param_values=[0.0, 1.0, 2.0],
+    title="Solution Evolution with Edge Density Scaling"
+)
 ```
 
-### Parameter Modification
-
-```python
-# Modify parameters of the problem, the Hamiltonian will be automatically rebuilt
-problem.modify_parameters("edge_density_scaling", 1.5)
-
-# Solve again with modified parameters
-modified_solution = problem.solve_classically()
-print(modified_solution)
-
-# Reset to original parameters
-problem.reset_parameters()
-```
+For more examples, see `src/examples/parameter_analysis.py`.
 
 ### Other problem types
 
 ```python
-from src.problems.instance_generators import (
+from hamiltonians import (
     create_tsp_instance,
     create_knapsack_instance,
     create_portfolio_instance,
@@ -91,7 +147,7 @@ You can evaluate any potential solution using the provided methods:
 ```python
 # Evaluate a specific bit assignment
 bitstring = "10110"  # For a 5-node MaxCut problem
-evaluation = problem.evaluate_bitstring(bitstring)
+evaluation = maxcut.evaluate_bitstring(bitstring)
 print(f"Cut value for {bitstring}: {evaluation['cut_value']}")
 ```
 

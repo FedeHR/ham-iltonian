@@ -2,29 +2,30 @@
 The MaxCut problem seeks to partition vertices of a graph into two sets 
 such that the sum of weights of edges between the two sets is maximized.
 """
+import inspect
+from typing import Dict, Optional, Any, List, Union
 import networkx as nx
 import matplotlib.pyplot as plt
-from typing import Dict, Optional, Any, List, Union
 
-from problems.base import Problem
-from hamiltonian import Hamiltonian
-from utils.pauli_utils import create_zz_term
-from utils.classical_solvers import solve_maxcut_brute_force, evaluate_mc_solution
-from parameter_modifiers.maxcut import get_modifiers
+from hamiltonians.problems.base import Problem
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+from hamiltonians.utils.pauli_utils import create_zz_term
+from hamiltonians.utils.classical_solvers import solve_maxcut_brute_force, evaluate_mc_solution
+from hamiltonians.parameter_modifiers.maxcut import get_modifiers
 
 class MaxCutProblem(Problem):
     """
     MaxCut Problem representation.
     """
-    def __init__(self, graph: nx.Graph, name: str = "MaxCut"):
+    def __init__(self, graph: nx.Graph, problem_type: str = "MaxCut"):
         """
         Initialize a MaxCut problem.
         
         Args:
             graph: NetworkX graph with weighted edges (for unweighted MaxCut, set all edge weights to 1)
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
         """
-        super().__init__(name)
+        super().__init__(problem_type)
         self.graph = graph
         self.original_graph = graph.copy()
         self.node_positions = nx.spring_layout(self.graph, seed=42)  # Store persistent positions
@@ -32,19 +33,50 @@ class MaxCutProblem(Problem):
         default_maxcut_modifiers = get_modifiers()
         self.modifier_functions.update(default_maxcut_modifiers)
     
-    def _apply_modifier(self, modifier_name: str, *args) -> None:
+    def _apply_modifier(self, modifier_name: str, **kwargs) -> None:
         """
         Apply the modifier to the graph weights.
         
         Args:
             modifier_name: Name of the modifier function to apply
-            *args: Parameters for the modifier function
+            **kwargs: Parameters for the modifier function
         """
         modifier_func = self.modifier_functions[modifier_name]
+        modifier_sig = inspect.signature(modifier_func)
+        
+        # Prevent users from passing automatically handled arguments
+        forbidden_params = {'weight', 'graph', 'edge_param'}
+        provided_forbidden = forbidden_params.intersection(kwargs.keys())
+        if provided_forbidden:
+            raise TypeError(
+                f"The following arguments for '{modifier_name}' are automatically provided "
+                f"and should not be passed: {list(provided_forbidden)}"
+            )
+
+        # Check for missing required arguments
+        required_params = [
+            p.name for p in modifier_sig.parameters.values() 
+            if p.default == inspect.Parameter.empty and p.name not in ['weight', 'graph', 'edge_param']
+        ]
+        missing_params = [p for p in required_params if p not in kwargs]
+        if missing_params:
+            raise TypeError(
+                f"Missing required arguments for '{modifier_name}': {missing_params}. "
+                f"Note: 'weight', 'graph', and 'edge_param' are provided automatically if needed by the modifier."
+            )
 
         for u, v, data in self.graph.edges(data=True):
             original_weight = data.get("weight")
-            modified_weight = modifier_func(original_weight, *args)
+            
+            call_kwargs = kwargs.copy()
+            if 'graph' in modifier_sig.parameters:
+                call_kwargs['graph'] = self.graph
+            if 'edge_param' in modifier_sig.parameters:
+                if "edge_param" not in data:
+                    raise ValueError(f"Edge ({u}, {v}) is missing the required 'edge_param' attribute for the '{modifier_name}' modifier.")
+                call_kwargs['edge_param'] = data.get("edge_param")
+            
+            modified_weight = modifier_func(original_weight, **call_kwargs)
             self.graph[u][v]["weight"] = modified_weight
 
     def build_hamiltonian(self) -> None:
@@ -118,22 +150,23 @@ class MaxCutProblem(Problem):
         self.graph = self.original_graph.copy()
         self.build_hamiltonian()
     
-    def visualize_graph(self, filename: Optional[str] = None) -> None:
+    def visualize_graph(self, filename: Optional[str] = None, show = True) -> None:
         """
         Visualize the graph.
         """
         plt.figure(figsize=(8, 6))
-        nx.draw(self.graph, with_labels=True, pos=self.node_positions,
-                node_color='tab:blue', node_size=700, width=2, font_color='white')
-
-        edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in self.graph.edges(data=True)}
-        nx.draw_networkx_edge_labels(self.graph, self.node_positions, edge_labels=edge_labels)
+        self.draw_graph()
 
         if filename:
             plt.savefig(filename)
             print(f"Visualization saved to {filename}")
-        plt.show()
-    
+
+    def draw_graph(self):
+        nx.draw(self.graph, with_labels=True, pos=self.node_positions,
+                node_color='tab:blue', node_size=700, width=2, font_color='white')
+        edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in self.graph.edges(data=True)}
+        nx.draw_networkx_edge_labels(self.graph, self.node_positions, edge_labels=edge_labels)
+
     def visualize_solution(self, solution: Dict[str, Any], filename: Optional[str] = None) -> None:
         """
         Visualize a MaxCut solution.
@@ -178,6 +211,6 @@ class MaxCutProblem(Problem):
         Returns:
             String description of the problem
         """
-        edge_str = ", ".join([f"({u},{v}): {d['weight']:.1f}" for u, v, d in self.graph.edges(data=True)])
+        edge_str = ", ".join([f"({u},{v}): {d['weight']:.3f}" for u, v, d in self.graph.edges(data=True)])
         return f"{self.name} Problem with {self.graph.number_of_nodes()} nodes and " \
                f"{self.graph.number_of_edges()} edges\nEdges: {edge_str}" 

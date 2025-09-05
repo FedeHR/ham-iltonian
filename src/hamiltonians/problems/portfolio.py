@@ -1,16 +1,18 @@
 """
 Portfolio Optimization Problem implementation.
+
+***** TODO IN CONSTRUCTION / BETA
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Any
 import matplotlib.patches as mpatches
 
-from problems.base import Problem
-from hamiltonian import Hamiltonian
-from utils.pauli_utils import create_z_term, create_zz_term
-from utils.classical_solvers import solve_portfolio_brute_force
-from parameter_modifiers.portfolio import get_modifiers
+from hamiltonians.problems.base import Problem
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+from hamiltonians.utils.pauli_utils import create_z_term, create_zz_term
+from hamiltonians.utils.classical_solvers import solve_portfolio_brute_force
+from hamiltonians.parameter_modifiers.portfolio import get_modifiers
 
 class PortfolioProblem(Problem):
     """
@@ -28,7 +30,7 @@ class PortfolioProblem(Problem):
         risk_factor: float = 1.0,
         asset_names: Optional[List[str]] = None,
         asset_types: Optional[List[str]] = None,
-        name: str = "Portfolio Optimization"
+        problem_type: str = "Portfolio Optimization"
     ):
         """
         Initialize a Portfolio Optimization Problem instance.
@@ -40,9 +42,9 @@ class PortfolioProblem(Problem):
             risk_factor: Weight for risk term (higher values mean more risk-averse)
             asset_names: Optional list of asset names (e.g., "AAPL", "MSFT")
             asset_types: Optional list of asset types/sectors (e.g., "tech", "finance")
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
         """
-        super().__init__(name)
+        super().__init__(problem_type)
         
         # Validate input
         self.n_assets = len(returns)

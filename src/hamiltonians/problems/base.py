@@ -1,26 +1,23 @@
-"""
-Base class for combinatorial optimization problems.
-"""
+
 from typing import Dict, List, Optional, Any, Callable
-import numpy as np
 from abc import ABC, abstractmethod
+import numpy as np
 
 class Problem(ABC):
     """
     Abstract base class for combinatorial optimization problems.
     
-    This class provides a generic interface for representing, solving,
-    and analyzing combinatorial optimization problems.
+    Provides a generic interface for representing, solving, and analyzing COPs.
     """
     
-    def __init__(self, name: str):
+    def __init__(self, problem_type: str):
         """
         Initialize a problem instance.
         
         Args:
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
         """
-        self.name = name
+        self.name = problem_type
         self.hamiltonian = None
         self.solutions = {}
         self.metadata = {}
@@ -28,9 +25,15 @@ class Problem(ABC):
         # Dictionary of parameter modifier functions
         self.modifier_functions = {
             # Default modifier functions
-            "linear": lambda value, param: value + param,
-            "quadratic": lambda value, param: value * (param ** 2),
-            "exponential": lambda value, param: value * np.exp(param),
+            # TODO think about clever general / default modifier functions
+            "linear":
+                lambda value_to_be_modified, param: value_to_be_modified + param,
+            "quadratic":
+                lambda value_to_be_modified, param: value_to_be_modified + param ** 2,
+            "qubic":
+                lambda value_to_be_modified, param: value_to_be_modified + param ** 3,
+            "exponential":
+                lambda value_to_be_modified, param: value_to_be_modified + np.exp(param),
         }
     
     def add_modifier_function(self, function_name: str, 
@@ -45,13 +48,13 @@ class Problem(ABC):
         """
         self.modifier_functions[function_name] = function
 
-    def modify_parameters(self, modifier_name: str, *args) -> None:
+    def modify_parameters(self, modifier_name: str, **kwargs) -> None:
         """
         Modify the problem parameters using the specified modifier function.
         
         Args:
             modifier_name: Name of the modifier function to apply
-            *args: Parameters for the modifier function
+            **kwargs: Parameters for the modifier function
         """
         if modifier_name not in self.modifier_functions:
             raise ValueError(f"Unknown modifier '{modifier_name}'. "
@@ -59,11 +62,11 @@ class Problem(ABC):
                              f"or define your own modifier function using add_modifier_function.")
         
         # Apply the parameter-specific modification logic
-        self._apply_modifier(modifier_name, *args)
+        self._apply_modifier(modifier_name, **kwargs)
         self.build_hamiltonian()
     
     @abstractmethod
-    def _apply_modifier(self, modifier_name: str, *args) -> None:
+    def _apply_modifier(self, modifier_name: str, **kwargs) -> None:
         """
         Apply the modifier to the problem parameters.
         

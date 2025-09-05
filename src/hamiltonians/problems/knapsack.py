@@ -1,15 +1,17 @@
 """
 Knapsack Problem implementation.
+***** TODO IN CONSTRUCTION / BETA
 """
 import matplotlib.pyplot as plt
+import inspect
 from typing import Dict, List, Optional, Any
 import numpy as np
 
-from problems.base import Problem
-from hamiltonian import Hamiltonian
-from utils.pauli_utils import create_z_term, create_zz_term
-from utils.classical_solvers import solve_knapsack_brute_force
-from parameter_modifiers.knapsack import get_modifiers
+from hamiltonians.problems.base import Problem
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+from hamiltonians.utils.pauli_utils import create_z_term, create_zz_term
+from hamiltonians.utils.classical_solvers import solve_knapsack_brute_force
+from hamiltonians.parameter_modifiers.knapsack import get_modifiers
 
 class KnapsackProblem(Problem):
     """
@@ -19,11 +21,11 @@ class KnapsackProblem(Problem):
     exceeding the capacity constraint.
     """
     
-    def __init__(self, 
-                 values: List[float], 
-                 weights: List[float], 
-                 capacity: float, 
-                 name: str = "Knapsack"):
+    def __init__(self,
+                 values: List[float],
+                 weights: List[float],
+                 capacity: float,
+                 problem_type: str = "Knapsack"):
         """
         Initialize a Knapsack problem.
         
@@ -31,15 +33,18 @@ class KnapsackProblem(Problem):
             values: List of values for each item
             weights: List of weights for each item
             capacity: Maximum capacity of the knapsack
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
         """
-        super().__init__(name)
+        super().__init__(problem_type)
         self.values = np.array(values, dtype=float).copy()
         self.weights = np.array(weights, dtype=float).copy()
         self.capacity = float(capacity)
         self.penalty = sum(self.values) + 1.0  # Default penalty
         
         assert len(values) == len(weights), "Values and weights must have the same length"
+        
+        n_items = len(values)
+        self.sensitivities = np.random.uniform(-1, 1, n_items)
         
         # Store problem-specific metadata
         self.metadata["problem"] = "Knapsack"
@@ -53,6 +58,7 @@ class KnapsackProblem(Problem):
         self.original_weights = self.weights.copy()
         self.original_capacity = self.capacity
         self.original_penalty = self.penalty
+        self.original_sensitivities = self.sensitivities.copy()
         
         # Register Knapsack-specific modifiers
         default_modifiers = get_modifiers()
@@ -61,38 +67,68 @@ class KnapsackProblem(Problem):
         # Build the initial Hamiltonian
         self.build_hamiltonian()
     
-    def _apply_modifier(self, modifier_name: str, *args) -> None:
+    def _apply_modifier(self, modifier_name: str, **kwargs) -> None:
         """
         Apply the modifier to the problem parameters.
         
         Args:
             modifier_name: Name of the modifier function to apply
-            *args: Parameters for the modifier function
+            **kwargs: Parameters for the modifier function
         """
         modifier_func = self.modifier_functions[modifier_name]
-        
+        modifier_sig = inspect.signature(modifier_func)
+
+        # Prevent users from passing automatically handled arguments
+        forbidden_params = {'value', 'weight', 'capacity', 'penalty', 'sensitivity'}
+        provided_forbidden = forbidden_params.intersection(kwargs.keys())
+        if provided_forbidden:
+            raise TypeError(
+                f"The following arguments for '{modifier_name}' are automatically provided "
+                f"and should not be passed: {list(provided_forbidden)}"
+            )
+
+        # Check for missing required arguments
+        required_params = [
+            p.name for p in modifier_sig.parameters.values()
+            if p.default == inspect.Parameter.empty and p.name not in forbidden_params
+        ]
+        missing_params = [p for p in required_params if p not in kwargs]
+        if missing_params:
+            raise TypeError(
+                f"Missing required arguments for '{modifier_name}': {missing_params}. "
+                f"Note: 'value', 'weight', 'capacity', 'penalty', and 'sensitivity' are provided "
+                f"automatically if needed by the modifier."
+            )
+
         # Apply the modifier based on which parameter it affects
-        if modifier_name == "scale_values" or modifier_name == "linear_value":
-            # Apply to all values
-            self.values = np.array([modifier_func(val, *args) for val in self.values])
+        call_kwargs = kwargs.copy()
+        
+        if "value" in modifier_sig.parameters:
+            new_values = []
+            for i, val in enumerate(self.values):
+                if 'sensitivity' in modifier_sig.parameters:
+                    call_kwargs['sensitivity'] = self.sensitivities[i]
+                new_values.append(modifier_func(val, **call_kwargs))
+            self.values = np.array(new_values)
             
-        elif modifier_name == "scale_weights" or modifier_name == "linear_weight":
-            # Apply to all weights
-            self.weights = np.array([modifier_func(weight, *args) for weight in self.weights])
+        elif "weight" in modifier_sig.parameters:
+            self.weights = np.array([modifier_func(w, **call_kwargs) for w in self.weights])
             
-        elif modifier_name == "scale_capacity":
-            # Apply to capacity
-            self.capacity = modifier_func(self.capacity, *args)
+        elif "capacity" in modifier_sig.parameters:
+            self.capacity = modifier_func(self.capacity, **call_kwargs)
             
-        elif modifier_name == "adjust_penalty":
-            # Apply to penalty
-            self.penalty = modifier_func(self.penalty, *args)
+        elif "penalty" in modifier_sig.parameters:
+            self.penalty = modifier_func(self.penalty, **call_kwargs)
+            
+        else:
+            raise ValueError(f"Modifier '{modifier_name}' does not seem to target any of the known "
+                             f"Knapsack parameters ('value', 'weight', 'capacity', 'penalty').")
             
         # Update metadata
         self.metadata["total_value"] = sum(self.values)
         self.metadata["total_weight"] = sum(self.weights)
         self.metadata["capacity"] = self.capacity
-    
+
     def build_hamiltonian(self) -> None:
         """
         Build the Knapsack Hamiltonian based on Lucas (2014) formulation.
@@ -282,6 +318,7 @@ class KnapsackProblem(Problem):
         self.weights = self.original_weights.copy()
         self.capacity = self.original_capacity
         self.penalty = self.original_penalty
+        self.sensitivities = self.original_sensitivities.copy()
         
         # Update metadata
         self.metadata["total_value"] = sum(self.values)

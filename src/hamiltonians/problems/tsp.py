@@ -1,15 +1,17 @@
 """
 Traveling Salesman Problem (TSP) implementation.
+
+***** TODO IN CONSTRUCTION / BETA
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Any
 
-from problems.base import Problem
-from hamiltonian import Hamiltonian
-from utils.pauli_utils import create_z_term, create_zz_term
-from utils.classical_solvers import solve_tsp_brute_force
-from parameter_modifiers.tsp import get_modifiers
+from hamiltonians.problems.base import Problem
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+from hamiltonians.utils.pauli_utils import create_z_term, create_zz_term
+from hamiltonians.utils.classical_solvers import solve_tsp_brute_force
+from hamiltonians.parameter_modifiers.tsp import get_modifiers
 
 class TSPProblem(Problem):
     """
@@ -25,7 +27,7 @@ class TSPProblem(Problem):
         positions: Optional[np.ndarray] = None,
         city_names: Optional[List[str]] = None,
         distance_metric: str = "euclidean",
-        name: str = "TSP"
+        problem_type: str = "TSP"
     ):
         """
         Initialize a TSP problem.
@@ -35,12 +37,12 @@ class TSPProblem(Problem):
             positions: Array of city positions (n x 2 or n x 3). Optional if distances is provided.
             city_names: Optional list of city names
             distance_metric: Metric to use when calculating distances from positions. Options: 'euclidean', 'manhattan'
-            name: Name of the problem instance
+            problem_type: Name of the problem instance
             
         Raises:
             ValueError: If neither distances nor positions are provided
         """
-        super().__init__(name)
+        super().__init__(problem_type)
         
         # Check that at least one of distances or positions is provided
         if distances is None and positions is None:

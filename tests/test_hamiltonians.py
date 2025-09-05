@@ -4,23 +4,22 @@ Tests for the Hamiltonian implementations.
 
 import os
 import sys
-import pytest
 import numpy as np
 import networkx as nx
 
 # Add the parent directory to path so we can import the package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.hamiltonians import (
+from hamiltonians import (
     Hamiltonian,
     create_maxcut_hamiltonian,
     create_tsp_hamiltonian,
     create_knapsack_hamiltonian,
     create_portfolio_hamiltonian,
-    get_maxcut_solution,
     get_tsp_solution,
     get_knapsack_solution,
     get_portfolio_solution
 )
+from hamiltonians import MaxCutProblem
 
 class TestHamiltonian:
     """Test the Hamiltonian base class."""
@@ -119,9 +118,12 @@ class TestMaxCut:
         G = nx.Graph()
         G.add_weighted_edges_from([(0, 1, 1.0), (1, 2, 2.0)])
         
+        # Create a MaxCutProblem instance
+        problem = MaxCutProblem(G)
+        
         # 010 means nodes 0 and 2 in one partition, node 1 in the other
         # This should give a cut value of 3.0 (sum of all edge weights)
-        solution = get_maxcut_solution("010", G)
+        solution = problem.evaluate_bitstring("010")
         assert solution['assignment'] == {0: 0, 1: 1, 2: 0}
         assert set(solution['partition'][0]) == {0, 2}
         assert set(solution['partition'][1]) == {1}
@@ -167,7 +169,7 @@ class TestTSP:
         solution = get_tsp_solution(bit_string, distances)
         assert solution['valid'] == True
         assert solution['tour'] == [0, 1, 2]
-        assert solution['distance'] == 6.0  # 1 + 3 + 2 = 6
+        assert solution['total_distance'] == 6.0  # 1 + 3 + 2 = 6
 
 
 class TestKnapsack:

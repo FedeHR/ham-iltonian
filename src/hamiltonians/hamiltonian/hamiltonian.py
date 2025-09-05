@@ -1,5 +1,5 @@
 import pennylane as qml
-from utils.pauli_utils import pauli_terms_to_pennylane
+from hamiltonians.utils import pauli_terms_to_pennylane
 
 class Hamiltonian:
     """
@@ -83,9 +83,9 @@ class Hamiltonian:
                 
             # Handle the sign
             if terms_strs and coefficient >= 0:
-                term_str = f"+ {abs(coefficient):.2f}"
+                term_str = f"+ {abs(coefficient):.3f}"
             else:
-                term_str = f"- {abs(coefficient):.2f}"
+                term_str = f"- {abs(coefficient):.3f}"
             
             # Add the Pauli operator
             term_str += f" * {pauli_term}"

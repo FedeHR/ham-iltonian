@@ -1,10 +1,52 @@
-"""
-Parameter modifier functions for the MaxCut problem.
-"""
-import numpy as np
-from typing import Callable, Dict
 
-def edge_density_modifier(weight: float, scaling_factor: float, graph) -> float:
+from typing import Callable, Dict
+import networkx as nx
+import numpy as np
+
+def linear_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+    """
+    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+    
+    Args:
+        weight: Original edge weight
+        scaling_factor: Factor to scale the weight by
+        edge_param: Specific parameter of the edge to consider in the scaling
+        
+    Returns:
+        Modified weight
+    """
+    return weight + scaling_factor * edge_param
+
+
+def quadratic_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+    """
+    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+
+    Args:
+        weight: Original edge weight
+        scaling_factor: Factor to scale the weight by
+        edge_param: Specific parameter of the edge to consider in the scaling
+
+    Returns:
+        Modified weight
+    """
+    return weight + (scaling_factor * edge_param) ** 2
+
+def qubic_edge_scaling(weight: float, scaling_factor: float, edge_param) -> float:
+    """
+    Linearly scale the edge weight by a factor, considering a specific edge parameter.
+
+    Args:
+        weight: Original edge weight
+        scaling_factor: Factor to scale the weight by
+        edge_param: Specific parameter of the edge to consider in the scaling
+
+    Returns:
+        Modified weight
+    """
+    return weight + (scaling_factor * edge_param) ** 3
+
+def edge_density_modifier(weight: float, scaling_factor: float, graph:nx.Graph) -> float:
     """
     Custom modifier that scales weights based on edge density and a scaling factor.
     
@@ -95,6 +137,9 @@ def get_modifiers() -> Dict[str, Callable]:
         Dictionary mapping modifier names to modifier functions
     """
     return {
+        "linear_edge_scaling": linear_edge_scaling,
+        "quadratic_edge_scaling": quadratic_edge_scaling,
+        "qubic_edge_scaling": qubic_edge_scaling,
         "edge_density_scaling": edge_density_modifier,
         "degree_weighted": degree_weighted_modifier,
         "weighted_sine": weighted_sine_modifier,

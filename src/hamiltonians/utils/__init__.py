@@ -16,7 +16,7 @@ from .classical_solvers import (
 )
 
 from .graph_utils import (
-    create_random_weighted_graph,
+    create_random_erdos_renyi_weighted_graph,
     create_complete_weighted_graph,
     create_grid_graph,
     create_weighted_graph_from_distances

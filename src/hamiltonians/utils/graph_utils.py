@@ -7,10 +7,10 @@ import numpy as np
 from typing import List, Tuple, Optional
 
 def create_random_erdos_renyi_weighted_graph(n_nodes: int,
-                                             edge_probability: float = 0.5,
-                                             init_weight_range: Tuple[float, float] = (0.1, 1),
+                                             edge_probability: float = 0.4,
+                                             init_weight_range: Tuple[float, float] = (-1, 1),
                                              n_edge_params: int = 1,
-                                             edge_param_range: Tuple[float, float] = (0.1, 1),
+                                             edge_param_range: Tuple[float, float] = (-1, 1),
                                              seed: Optional[int] = None) -> nx.Graph:
     """
     Create a random weighted graph.

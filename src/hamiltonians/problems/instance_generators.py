@@ -8,20 +8,50 @@ import numpy as np
 from typing import List, Tuple, Optional
 
 from hamiltonians.utils.graph_utils import (
-    create_random_weighted_graph, 
+    create_random_erdos_renyi_weighted_graph,
     create_complete_weighted_graph,
     create_grid_graph,
     create_weighted_graph_from_distances
 )
+from hamiltonians.problems.maxcut import MaxCutProblem
+from hamiltonians.problems.tsp import TSPProblem
+from hamiltonians.problems.number_partitioning import NumberPartitioningProblem
+
+def generate_n_maxcut_instances(
+    n_instances: int,
+    n_nodes: int = 8,
+    edge_probability: float = 0.4,
+    init_weight_range: Tuple[float, float] = (-1.0, 1.0),
+    edge_param_range: Tuple[float, float] = (-1.0, 1.0),
+    graph_type: str = "erdos-renyi",
+    grid_dims: Optional[Tuple[int, int]] = None,
+    base_seed: Optional[int] = None
+) -> List['MaxCutProblem']:
+    """
+    Generates n MaxCutProblem instances with varying seeds.
+    """
+    instances = []
+    for i in range(n_instances):
+        seed = base_seed + i if base_seed is not None else None
+        instance = create_maxcut_instance(
+            n_nodes=n_nodes,
+            edge_probability=edge_probability,
+            init_weight_range=init_weight_range,
+            edge_param_range=edge_param_range,
+            graph_type=graph_type,
+            grid_dims=grid_dims,
+            seed=seed
+        )
+        instances.append(instance)
+    return instances
 
 def create_maxcut_instance(
-    n_nodes: int = 5,
-    edge_probability: float = 0.7,
-    init_weight_range: Tuple[float, float] = (0.5, 2.0),
+    n_nodes: int = 8,
+    edge_probability: float = 0.4,
+    init_weight_range: Tuple[float, float] = (-1.0, 1.0),
     edge_param_range: Tuple[float, float] = (-1.0, 1.0),
-    graph_type: str = "random", 
+    graph_type: str = "erdos-renyi",
     grid_dims: Optional[Tuple[int, int]] = None,
-    name: str = "MaxCut Instance",
     seed: Optional[int] = None
 ):
     """
@@ -31,19 +61,16 @@ def create_maxcut_instance(
         n_nodes: Number of nodes in the graph
         edge_probability: Probability of edge creation between any two nodes (for random graphs)
         init_weight_range: Range of initial edge weights (min, max)
-        graph_type: Type of graph ("random", "complete", "grid")
+        edge_param_range: Range of values for the additional per-edge parameters (min, max)
+        graph_type: Type of graph ("erdos-renyi", "complete", "grid")
         grid_dims: Dimensions (rows, cols) for grid graph (ignores n_nodes)
-        name: Name of the problem instance
         seed: Random seed for reproducibility
         
     Returns:
         MaxCutProblem instance
     """
-    # Import inside function to avoid circular imports
-    from .maxcut import MaxCutProblem
-    
-    if graph_type == "random":
-        graph = create_random_weighted_graph(
+    if graph_type == "erdos-renyi":
+        graph = create_random_erdos_renyi_weighted_graph(
             n_nodes=n_nodes, 
             edge_probability=edge_probability,
             init_weight_range=init_weight_range,
@@ -69,7 +96,7 @@ def create_maxcut_instance(
     else:
         raise ValueError(f"Unknown graph type: {graph_type}")
         
-    return MaxCutProblem(graph, problem_type=name)
+    return MaxCutProblem(graph)
 
 def create_tsp_instance(
     n_cities: int = 5,
@@ -91,9 +118,6 @@ def create_tsp_instance(
     Returns:
         TSPProblem instance
     """
-    # Import inside function to avoid circular imports
-    from .tsp import TSPProblem
-    
     if seed is not None:
         np.random.seed(seed)
         
@@ -239,9 +263,6 @@ def create_number_partitioning_instance(
     Returns:
         NumberPartitioningProblem instance
     """
-    # Import here to avoid circular imports
-    from .number_partitioning import NumberPartitioningProblem
-    
     if seed is not None:
         np.random.seed(seed)
     

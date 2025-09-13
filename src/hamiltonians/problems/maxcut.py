@@ -174,16 +174,23 @@ class MaxCutProblem(Problem):
         edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in self.graph.edges(data=True)}
         nx.draw_networkx_edge_labels(self.graph, self.node_positions, edge_labels=edge_labels)
 
-    def visualize_solution(self, solution: Dict[str, Any], filename: Optional[str] = None) -> None:
+    def visualize_solution(self, solution: Union[str, Dict[str, Any]], filename: Optional[str] = None) -> None:
         """
         Visualize a MaxCut solution.
         
         Args:
-            solution: Solution dictionary
+            solution: Solution dictionary or the name of a stored solution
             filename: Optional filename to save the visualization
         """
+        if isinstance(solution, str):
+            solution_name = solution
+            solution = self.get_solution(solution_name)
+            if solution is None:
+                print(f"Solution '{solution_name}' not found.")
+                return
+
         if not solution:
-            raise ValueError("First run solve_classically() to get a solution.")
+            raise ValueError("A valid solution must be provided.")
         
         plt.figure(figsize=(8, 6))
         

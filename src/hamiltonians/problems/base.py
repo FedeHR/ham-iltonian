@@ -3,6 +3,9 @@ from typing import Dict, List, Optional, Any, Callable
 from abc import ABC, abstractmethod
 import numpy as np
 
+from hamiltonians.hamiltonian.hamiltonian import Hamiltonian
+
+
 class Problem(ABC):
     """
     Abstract base class for combinatorial optimization problems.
@@ -299,6 +302,18 @@ class Problem(ABC):
                 ratio = comparison[name]['ratio']
                 star = "*" if name == best_name else " "
                 print(f"{name:<15} {quality:<10.4f} {ratio:<10.4f} {star}")
+
+    def get_hamiltonian(self) -> Hamiltonian:
+        """
+        Get the Hamiltonian for this problem.
+        """
+        return self.hamiltonian
+
+    def get_n_qubits(self) -> int:
+        """
+        Get the number of qubits for this problem.
+        """
+        return self.hamiltonian.num_qubits
 
     def __str__(self) -> str:
         """

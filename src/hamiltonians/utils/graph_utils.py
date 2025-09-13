@@ -6,19 +6,12 @@ import networkx as nx
 import numpy as np
 from typing import List, Tuple, Optional
 
-# TODO global seed --> still has to be compatible with multiple problem generation
-# TODO add function to generate n graphs / n maxcut functions
-# Idea! Make a function generate_n_maxcut which uses the logic of the for_loop increasing the seed!
-# for idx, i in range(n_instances)
-#    g = create...(seed=idx)
-# EASY!
-
-def create_random_weighted_graph(n_nodes: int,
-                                 edge_probability: float = 0.5,
-                                 init_weight_range: Tuple[float, float] = (0.1, 1),
-                                 n_edge_params: int = 1,
-                                 edge_param_range: Tuple[float, float] = (0.1, 1),
-                                 seed: Optional[int] = None) -> nx.Graph:
+def create_random_erdos_renyi_weighted_graph(n_nodes: int,
+                                             edge_probability: float = 0.5,
+                                             init_weight_range: Tuple[float, float] = (0.1, 1),
+                                             n_edge_params: int = 1,
+                                             edge_param_range: Tuple[float, float] = (0.1, 1),
+                                             seed: Optional[int] = None) -> nx.Graph:
     """
     Create a random weighted graph.
     
